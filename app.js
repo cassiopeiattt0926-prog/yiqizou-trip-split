@@ -163,13 +163,13 @@ function openTripSheet(id = null) {
   $("#tripSheet").showModal();
 }
 
-function parsePeople(raw, count) {
+function parsePeople(raw, count, existing = []) {
   const names = raw.split(/[,\s，、]+/).map((x) => x.trim()).filter(Boolean);
   const finalNames = Array.from({ length: count }, (_, i) => names[i] || `朋友${i + 1}`);
   return finalNames.map((name, i) => ({
-    id: `${name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-") || "p"}-${i + 1}`,
+    id: existing[i]?.id || `${name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-") || "p"}-${i + 1}`,
     name,
-    color: palette[i % palette.length]
+    color: existing[i]?.color || palette[i % palette.length]
   }));
 }
 
@@ -178,10 +178,10 @@ function saveTrip() {
   const destination = $("#tripDestination").value.trim();
   const peopleCount = Number($("#tripPeopleCount").value);
   if (!name || !destination || !peopleCount || peopleCount < 1) return;
-  const people = parsePeople($("#tripNicknames").value, peopleCount);
+  const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
+  const people = parsePeople($("#tripNicknames").value, peopleCount, currentTrip?.people || []);
   if (editingTripId) {
-    const trip = trips.find((t) => t.id === editingTripId);
-    Object.assign(trip, { name, destination, startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people });
+    Object.assign(currentTrip, { name, destination, startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people });
   } else {
     const trip = { id: crypto.randomUUID(), name, destination, startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people, expenses: [] };
     trips.unshift(trip);
