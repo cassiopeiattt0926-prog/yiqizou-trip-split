@@ -85,10 +85,10 @@ em{font-style:normal;color:#98a49d;font-size:10px;margin-left:4px}
 .calendar-grid button.start,.calendar-grid button.end{background:var(--green);color:#fff;font-weight:800}
 .calendar-grid button.start small,.calendar-grid button.end small{color:#fff;border-color:#fff}
 .calendar-grid button.today:not(.start):not(.end){color:var(--ink);background:transparent}
-dialog input,dialog select{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+dialog input,dialog select{width:100%;max-width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:16px;line-height:1.35}
 dialog input:focus,dialog select:focus{outline:2px solid #174f3a22;border-color:#98b8a9}
 .amount-row{display:flex;align-items:center;border-bottom:1px solid var(--line)}
-.amount-row select{width:90px;border:0;background:none}
+.amount-row select{width:90px;border:0;background:none;font-size:16px}
 .amount-row input{border:0;background:none;text-align:right;font:40px Georgia,serif;min-width:0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .people-pick{display:flex;gap:10px;margin-top:9px;flex-wrap:wrap}
