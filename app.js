@@ -40,6 +40,8 @@ let selected = [];
 let participantMode = "all";
 let editingTripId = null;
 let editingExpenseId = null;
+let calendarCursor = new Date(today().slice(0, 7) + "-01");
+let selectingDatePart = "start";
 
 function loadTrips() {
   const saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
@@ -107,7 +109,8 @@ function showDetail() {
 }
 
 function avatar(p) {
-  return `<span class="avatar" style="background:${p.color}">${p.name.slice(0, 3)}</span>`;
+  const seed = encodeURIComponent(`${p.id}-${p.name}`);
+  return `<span class="avatar"><img alt="${p.name}" src="https://robohash.org/${seed}.png?set=set4&size=96x96"></span>`;
 }
 
 function calc(trip) {
@@ -190,7 +193,10 @@ function openTripSheet(id = null) {
   $("#tripName").value = trip?.name || "";
   $("#tripStart").value = trip?.startDate || "";
   $("#tripEnd").value = trip?.endDate || "";
+  selectingDatePart = trip?.startDate && !trip?.endDate ? "end" : "start";
+  calendarCursor = new Date((trip?.startDate || today()).slice(0, 7) + "-01");
   updateTripDateRangeButton();
+  renderCalendar();
   $("#tripDateRangePanel").classList.add("hidden");
   $("#tripPeopleCount").value = trip?.peopleCount || trip?.people.length || "";
   $("#tripNicknames").value = trip?.people.map((p) => p.name).join(", ") || "";
@@ -232,6 +238,53 @@ function updateTripDateRangeButton() {
   const start = $("#tripStart").value;
   const end = $("#tripEnd").value;
   $("#tripDateRangeButton").textContent = start && end ? `${start} — ${end}` : start ? `${start} — 选择结束日期` : "选择开始和结束日期";
+}
+
+function formatDate(d) {
+  const x = new Date(d);
+  x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
+  return x.toISOString().slice(0, 10);
+}
+
+function renderCalendar() {
+  const start = $("#tripStart").value;
+  const end = $("#tripEnd").value;
+  const y = calendarCursor.getFullYear();
+  const m = calendarCursor.getMonth();
+  $("#calendarTitle").textContent = selectingDatePart === "start" ? "开始日期" : "结束日期";
+  $("#calendarMonth").innerHTML = `<button type="button" data-cal-prev>‹</button><span>${y}年${m + 1}月</span><button type="button" data-cal-next>›</button>`;
+  const first = new Date(y, m, 1);
+  const days = new Date(y, m + 1, 0).getDate();
+  const blanks = Array.from({ length: first.getDay() }, () => `<span></span>`).join("");
+  const cells = Array.from({ length: days }, (_, i) => {
+    const n = i + 1;
+    const iso = formatDate(new Date(y, m, n));
+    const isStart = iso === start;
+    const isEnd = iso === end;
+    const inRange = start && end && iso > start && iso < end;
+    const isToday = iso === today();
+    return `<button type="button" data-date="${iso}" class="${isStart ? "start" : ""} ${isEnd ? "end" : ""} ${inRange ? "range" : ""} ${isToday ? "today" : ""}"><span>${n}</span>${isToday ? "<small>today</small>" : ""}</button>`;
+  }).join("");
+  $("#calendarGrid").innerHTML = blanks + cells;
+  $("#calendarHint").textContent = start && end ? `${start} 到 ${end}` : start ? "请选择结束日期" : "先选择开始日期";
+}
+
+function pickTripDate(iso) {
+  const start = $("#tripStart").value;
+  if (selectingDatePart === "start" || !start || (start && $("#tripEnd").value)) {
+    $("#tripStart").value = iso;
+    $("#tripEnd").value = "";
+    selectingDatePart = "end";
+  } else if (iso < start) {
+    $("#tripStart").value = iso;
+    $("#tripEnd").value = "";
+    selectingDatePart = "end";
+  } else {
+    $("#tripEnd").value = iso;
+    selectingDatePart = "start";
+  }
+  updateTripDateRangeButton();
+  renderCalendar();
 }
 
 function setParticipantModeFromSelection(trip, expense) {
@@ -282,29 +335,31 @@ function renderPeoplePick() {
     const isOn = participantMode === "partial" && selected.includes(p.id);
     return `<button type="button" data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
   }).join("");
-  $("#peoplePick").querySelector("[data-all]").onclick = () => {
-    if (isBorrow) return;
-    participantMode = "partial";
-    selected = [payerId];
-    renderPeoplePick();
-    updateExpenseSaveState();
-  };
-  $("#peoplePick").querySelectorAll("[data-id]").forEach((button) => {
-    button.onclick = () => {
-      if (button.disabled) return;
-      if (participantMode === "all") {
-        participantMode = "partial";
-        selected = isBorrow ? [button.dataset.id] : Array.from(new Set([payerId, button.dataset.id]));
-      } else {
-        selected = selected.includes(button.dataset.id) ? selected.filter((x) => x !== button.dataset.id) : [...selected, button.dataset.id];
-        if (!isBorrow) selected = [...new Set([payerId, ...selected])];
-      }
-      if (isBorrow) selected = selected.filter((id) => id !== payerId);
-      renderPeoplePick();
-      updateExpenseSaveState();
-    };
-  });
   updateExpenseSaveState();
+}
+
+function toggleParticipant(target) {
+  const trip = activeTrip();
+  const isBorrow = $("#category").value === "借用";
+  const payerId = $("#payer").value;
+  if (target.matches("[data-all]")) {
+    if (isBorrow) return;
+    participantMode = "all";
+    selected = trip.people.map((p) => p.id);
+    renderPeoplePick();
+    return;
+  }
+  const id = target.dataset.id;
+  if (!id || target.disabled) return;
+  if (participantMode === "all") {
+    participantMode = "partial";
+    selected = isBorrow ? [id] : [...new Set([payerId, id])];
+  } else {
+    selected = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    if (!isBorrow) selected = [...new Set([payerId, ...selected])];
+  }
+  if (isBorrow) selected = selected.filter((x) => x !== payerId);
+  renderPeoplePick();
 }
 
 function saveExpense() {
@@ -367,12 +422,15 @@ $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
-$("#tripStart").onchange = () => {
-  if ($("#tripEnd").value && $("#tripEnd").value < $("#tripStart").value) $("#tripEnd").value = "";
-  updateTripDateRangeButton();
-  $("#tripEnd").focus();
+$("#calendarMonth").onclick = (event) => {
+  if (event.target.closest("[data-cal-prev]")) calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() - 1, 1);
+  if (event.target.closest("[data-cal-next]")) calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 1);
+  renderCalendar();
 };
-$("#tripEnd").onchange = updateTripDateRangeButton;
+$("#calendarGrid").onclick = (event) => {
+  const button = event.target.closest("[data-date]");
+  if (button) pickTripDate(button.dataset.date);
+};
 $("#add").onclick = () => {
   openExpenseSheet();
 };
@@ -392,6 +450,17 @@ $("#currency").onchange = () => {
   $("#conversion").textContent = $("#currency").value === "CNY" ? "" : `约 ${money(Number($("#amount").value || 0) * rates[$("#currency").value])}`;
   updateExpenseSaveState();
 };
+$("#peoplePick").addEventListener("pointerup", (event) => {
+  const button = event.target.closest("button");
+  if (button) toggleParticipant(button);
+});
+$("#peoplePick").addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (button) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+});
 saveTrips();
 showHome();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
