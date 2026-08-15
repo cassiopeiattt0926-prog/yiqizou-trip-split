@@ -4,8 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#174f3a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>一起走 · 旅行记账</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/avatars/cat-01.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,6 +42,7 @@
       <div id="avatars" class="avatars"></div>
     </section>
     <section id="rateTools" class="rate-tools"></section>
+    <p id="detailDemoBanner" class="demo-notice hidden"><b>示例</b> 这是帮助您了解功能的示例数据，可随时删除。</p>
     <nav><button class="active" data-tab="bills">全部账单</button><button data-tab="settle">谁该付谁</button><button data-tab="stats">个人统计</button></nav>
     <section id="bills" class="content">
       <div class="section-head"><h2>最近记录</h2><span>按人民币折算</span></div>
@@ -85,7 +89,7 @@
 
 <dialog id="sheet">
   <div class="grab"></div>
-  <div class="sheet-head"><button type="button" data-close>取消</button><h2>记一笔</h2><button type="button" id="saveTop">保存</button></div>
+  <div class="sheet-head"><button type="button" data-close>取消</button><h2 id="sheetTitle">记一笔</h2><button type="button" id="saveTop">保存</button></div>
   <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>USD</option><option>JPY</option><option>KRW</option><option>SGD</option><option>MYR</option><option>THB</option><option>GBP</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
   <p id="conversion"></p>
   <label id="rateField" class="hidden">兑人民币汇率 <span class="req">*</span><input id="rateInput" type="number" inputmode="decimal" min="0" step="0.0001" placeholder="例如：7.18"><small class="field-tip">该汇率与实际有误差，您可在旅行结束后依据实际消费汇率进行单笔或批量的汇率调整</small></label>
