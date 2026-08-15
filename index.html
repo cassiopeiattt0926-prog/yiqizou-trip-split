@@ -38,6 +38,7 @@
       <p id="summary"></p>
       <div id="avatars" class="avatars"></div>
     </section>
+    <section id="rateTools" class="rate-tools"></section>
     <nav><button class="active" data-tab="bills">全部账单</button><button data-tab="settle">谁该付谁</button><button data-tab="stats">个人统计</button></nav>
     <section id="bills" class="content">
       <div class="section-head"><h2>最近记录</h2><span>按人民币折算</span></div>
@@ -77,6 +78,7 @@
   </div>
   <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
   <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, bb, qq, xw"></label>
+  <div id="avatarChooser" class="avatar-chooser"></div>
   <p class="hint small">昵称用逗号或空格分开，之后记账时直接点选。</p>
   <button id="saveTrip" class="wide">保存旅行项目</button>
 </dialog>
@@ -86,6 +88,7 @@
   <div class="sheet-head"><button type="button" data-close>取消</button><h2>记一笔</h2><button type="button" id="saveTop">保存</button></div>
   <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>USD</option><option>JPY</option><option>KRW</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
   <p id="conversion"></p>
+  <label id="rateField" class="hidden">历史兑人民币汇率 <span class="req">*</span><input id="rateInput" type="number" inputmode="decimal" min="0" step="0.0001" placeholder="例如：7.18"></label>
   <label>日期 <em>选填</em><input id="expenseDate" type="date"></label>
   <div class="two">
     <label>类型 <span class="req">*</span><select id="category" required></select></label>
@@ -95,6 +98,15 @@
   <label>事项 <span class="req">*</span><input id="item" required placeholder="例如：机场去酒店"></label>
   <button id="save" class="wide">保存并平均分摊</button>
 </dialog>
+
+<dialog id="rateSheet">
+  <div class="grab"></div>
+  <div class="sheet-head"><button type="button" data-rate-close>取消</button><h2>批量改汇率</h2><button type="button" id="saveRatesTop">保存</button></div>
+  <p class="hint small left">只展示本旅行录入过的外币。保存后会按新汇率重新计算所有账单、应收应付、结算方案和个人统计。</p>
+  <div id="rateList" class="rate-list"></div>
+  <button id="saveRates" class="wide">保存并重新计算</button>
+</dialog>
+<script src="avatars.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
