@@ -18,7 +18,8 @@ header{height:76px;padding:18px 20px 10px;display:flex;align-items:center;justif
 .hero h1{font:42px Georgia,serif;margin:8px 0 4px}
 .hero p{font-size:12px;color:#bfd2c8}
 .avatars{display:flex;margin-top:20px;flex-wrap:wrap}
-.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:10px;margin:0 5px 5px 0}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff;border:1px solid #ffffff66;overflow:hidden;margin:0 5px 5px 0;box-shadow:0 3px 9px #00000014}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
 nav{display:grid;grid-template-columns:1fr 1fr 1fr;margin:0 20px;border-bottom:1px solid var(--line)}
 nav button{border:0;background:none;padding:14px;color:var(--muted);font-weight:600}
 nav .active{color:var(--green);border-bottom:3px solid var(--green)}
@@ -66,8 +67,21 @@ em{font-style:normal;color:#98a49d;font-size:10px;margin-left:4px}
 .date-group{font-size:12px;color:var(--muted);margin-top:15px}
 .date-group .two{margin-top:7px}
 .date-range-button{width:100%;margin-top:7px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;text-align:left;color:var(--ink)}
-.date-range-panel{margin-top:8px;padding:10px;border:1px solid #edf0ea;border-radius:16px;background:#fff}
-.date-range-panel p{margin:0 0 8px;color:var(--muted);font-size:11px}
+.date-range-panel{margin-top:8px;padding:12px;border:1px solid #edf0ea;border-radius:16px;background:#fff;width:100%;max-width:100%;overflow:hidden}
+.date-range-panel p{margin:8px 0 0;color:var(--muted);font-size:11px;text-align:center}
+.calendar-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.calendar-head b{color:var(--green);font-size:14px}
+#calendarMonth{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);white-space:nowrap}
+#calendarMonth button{appearance:none;-webkit-appearance:none;border:0;background:#eef3e9;color:var(--green);border-radius:10px;width:28px;height:28px;font-size:18px;line-height:1}
+.calendar-week,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.calendar-week span{text-align:center;font-size:10px;color:#98a49d}
+.calendar-grid button{appearance:none;-webkit-appearance:none;min-width:0;height:42px;border:0;border-radius:12px;background:transparent;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;-webkit-tap-highlight-color:transparent}
+.calendar-grid button span{font-size:14px}
+.calendar-grid button small{font-size:7px;color:var(--orange);line-height:1;border-top:2px solid var(--orange);padding-top:1px;text-transform:uppercase}
+.calendar-grid button.range{background:#eaf3ef}
+.calendar-grid button.start,.calendar-grid button.end{background:var(--green);color:#fff;font-weight:800}
+.calendar-grid button.start small,.calendar-grid button.end small{color:#fff;border-color:#fff}
+.calendar-grid button.today:not(.start):not(.end){color:var(--ink);background:transparent}
 dialog input,dialog select{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
 dialog input:focus,dialog select:focus{outline:2px solid #174f3a22;border-color:#98b8a9}
 .amount-row{display:flex;align-items:center;border-bottom:1px solid var(--line)}
@@ -75,7 +89,7 @@ dialog input:focus,dialog select:focus{outline:2px solid #174f3a22;border-color:
 .amount-row input{border:0;background:none;text-align:right;font:40px Georgia,serif;min-width:0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .people-pick{display:flex;gap:10px;margin-top:9px;flex-wrap:wrap}
-.people-pick button{appearance:none;-webkit-appearance:none;border:2px solid transparent;border-radius:14px;background:#f2f4ef;color:#98a49d;padding:8px 11px;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}
+.people-pick button{appearance:none;-webkit-appearance:none;border:2px solid transparent;border-radius:14px;background:#f2f4ef;color:#98a49d;padding:8px 11px;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation;position:relative;z-index:2}
 .people-pick button.on{border-color:var(--green);background:#e8f3ec;color:var(--green);font-weight:800;box-shadow:0 0 0 2px #174f3a18}
 .people-pick button:disabled{background:#e6e9e2;color:#aab2ad;text-decoration:line-through}
 .wide{width:100%;border:0;border-radius:14px;background:var(--green);color:#fff;padding:15px;font-weight:700;margin-top:20px}
