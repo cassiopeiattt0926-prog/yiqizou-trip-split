@@ -200,6 +200,111 @@ function settle(trip, balances) {
   return out;
 }
 
+function settlementShareText(trip, transfers) {
+  const lines = transfers.length
+    ? transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`)
+    : ["已结清"];
+  return [`${trip.name}·结算单`, ...lines, "金额均按人民币结算"].join("\n");
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function settlementShareFile(trip, transfers) {
+  const width = 1080;
+  const rowCount = Math.max(transfers.length, 1);
+  const height = 560 + rowCount * 144;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
+  ctx.fillStyle = "#f7f5ef";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#0f5b40";
+  roundedRect(ctx, 48, 48, width - 96, 330, 48);
+  ctx.fill();
+
+  ctx.fillStyle = "#d8e8df";
+  ctx.font = '500 36px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("一起走 · 旅行结算", 104, 126);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '700 68px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  const tripName = String(trip.name || "旅行");
+  ctx.fillText(tripName.length > 12 ? `${tripName.slice(0, 12)}…` : tripName, 104, 226);
+  ctx.fillStyle = "#d8e8df";
+  ctx.font = '400 32px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText(`${dateRange(trip)} · ${trip.people.length}位朋友`, 104, 304);
+
+  ctx.fillStyle = "#13271f";
+  ctx.font = '700 44px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("最少转账方案", 64, 458);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#758079";
+  ctx.font = '400 30px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText(`${transfers.length}笔即可结清`, width - 64, 458);
+
+  const rows = transfers.length ? transfers : [{ settled: true }];
+  rows.forEach((transfer, index) => {
+    const y = 500 + index * 144;
+    ctx.fillStyle = "#ffffff";
+    roundedRect(ctx, 48, y, width - 96, 120, 28);
+    ctx.fill();
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#13271f";
+    ctx.font = '600 38px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    if (transfer.settled) {
+      ctx.fillText("现在已经结清", 88, y + 75);
+      return;
+    }
+    const from = person(trip, transfer.from).name;
+    const to = person(trip, transfer.to).name;
+    ctx.fillText(`${from} 支付给 ${to}`, 88, y + 75);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#0f7653";
+    ctx.font = '700 40px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(money(transfer.n), width - 88, y + 75);
+  });
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#758079";
+  ctx.font = '400 28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("金额均按人民币结算", width / 2, height - 46);
+
+  const dataUrl = canvas.toDataURL("image/png");
+  const binary = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const safeName = tripName.replace(/[\\/:*?"<>|]/g, "-").slice(0, 30) || "旅行";
+  return new File([bytes], `${safeName}-结算单.png`, { type: "image/png" });
+}
+
+async function copySettlementText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand?.("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard unavailable");
+}
+
 function renderDetail() {
   const trip = activeTrip();
   if (!trip) return showHome();
@@ -245,15 +350,25 @@ function renderDetail() {
   $("#settleCount").textContent = `${transfers.length} 笔即可结清`;
   $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${escapeHtml(person(trip, x.from).name)} 支付给 ${escapeHtml(person(trip, x.to).name)}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
   $("#share").onclick = async () => {
-    const text = transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清";
+    const text = settlementShareText(trip, transfers);
     try {
-      if (navigator.share) await navigator.share({ title: `${trip.name}结算`, text });
-      else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(text);
-        showToast("结算方案已复制");
-      } else showToast("当前浏览器暂不支持分享");
+      const file = settlementShareFile(trip, transfers);
+      const shareData = { files: [file] };
+      if (navigator.share && navigator.canShare?.(shareData)) {
+        // 只传图片文件，避免微信 iOS 分享扩展拒绝“图片 + 文字”混合类型。
+        await navigator.share(shareData);
+        return;
+      }
+      await copySettlementText(text);
+      showToast("结算方案已复制，请粘贴到微信");
     } catch (error) {
-      if (error?.name !== "AbortError") showToast("分享未完成，请稍后再试");
+      if (error?.name === "AbortError") return;
+      try {
+        await copySettlementText(text);
+        showToast("图片分享不可用，结算方案已复制");
+      } catch (_) {
+        showToast("分享未完成，请稍后再试");
+      }
     }
   };
   renderStats(trip);
