@@ -1,4 +1,5 @@
 const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, EUR: 7.85 };
+const RatePolicy = window.HAOYOUJI_RATE_POLICY;
 const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", EUR: "€" };
 const typeOptions = [
   ["酒店", "🛏️"],
@@ -79,6 +80,7 @@ function saveTrips() {
 }
 
 function migrateTrip(trip) {
+  RatePolicy.ensureRateSettings(trip);
   trip.people = (trip.people || []).map((p, i) => ({ ...p, avatarIndex: p.avatarIndex || (i % avatarCount) + 1 }));
   const ids = new Set(trip.people.map((p) => p.id));
   trip.expenses = (trip.expenses || []).map((e) => {
@@ -169,6 +171,10 @@ function avatar(p) {
 
 function rateOf(expense) {
   return Math.max(finiteNumber(expense.rate, rates[expense.currency] || 1), 0.000001);
+}
+
+function preferredTripRate(trip, currency) {
+  return RatePolicy.preferredRate(trip, currency, rates);
 }
 
 function cnyAmount(expense) {
@@ -526,7 +532,16 @@ function usedForeignCurrencies(trip) {
 }
 
 function rateHistory(trip, currency) {
-  return [...new Set(trip.expenses.filter((e) => e.currency === currency).map((e) => String(rateOf(e))))];
+  const setting = RatePolicy.ensureRateSettings(trip)[currency] || {};
+  const expenses = trip.expenses.filter((e) => e.currency === currency)
+    .map((e, index) => ({ e, index }))
+    .sort((a, b) => (Number(b.e.rateUpdatedAt) || 0) - (Number(a.e.rateUpdatedAt) || 0) || a.index - b.index)
+    .map(({ e }) => String(rateOf(e)));
+  return [...new Set([
+    setting.batchRate ? String(setting.batchRate) : "",
+    setting.singleRate ? String(setting.singleRate) : "",
+    ...expenses
+  ].filter(Boolean))];
 }
 
 function renderRateTools(trip) {
@@ -738,7 +753,8 @@ function resetExpenseForm(expense = null) {
   $("#category").value = expense?.category || $("#category").value;
   $("#category").dataset.previousCategory = $("#category").value;
   $("#payer").value = expense?.payer || $("#payer").value;
-  $("#rateInput").value = expense?.rate || rates[$("#currency").value] || 1;
+  // 编辑既有账单时保留该笔历史值；新建或之后切换币种时采用项目级汇率策略。
+  $("#rateInput").value = expense ? rateOf(expense) : preferredTripRate(trip, $("#currency").value);
   updateConversion();
   updateRateField();
   renderPeoplePick();
@@ -813,12 +829,18 @@ function saveExpense() {
   const invalidRate = currency !== "CNY" && (Number.isNaN(rate) || rate <= 0);
   const firstInvalid = invalidAmount ? $("#amount") : invalidRate ? $("#rateInput") : !category ? $("#category") : !$("#payer").value ? $("#payer") : !validParticipants.length ? $("#peoplePick") : !title ? $("#item") : null;
   if (firstInvalid) return focusInvalid(firstInvalid);
-  const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate, payer: $("#payer").value, participants: [...validParticipants], date: $("#expenseDate").value };
+  const previousExpense = editingExpenseId ? trip.expenses.find((e) => e.id === editingExpenseId) : null;
+  const rateChanged = currency !== "CNY" && (!previousExpense
+    || previousExpense.currency !== currency
+    || Math.abs(rateOf(previousExpense) - rate) > 0.000000001);
+  const rateUpdatedAt = rateChanged ? Date.now() : previousExpense?.rateUpdatedAt;
+  const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate, payer: $("#payer").value, participants: [...validParticipants], date: $("#expenseDate").value, ...(rateUpdatedAt ? { rateUpdatedAt } : {}) };
   if (editingExpenseId) {
     trip.expenses = trip.expenses.map((e) => e.id === editingExpenseId ? nextExpense : e);
   } else {
     trip.expenses.unshift(nextExpense);
   }
+  if (rateChanged) RatePolicy.recordSingleRate(trip, currency, rate, rateUpdatedAt);
   editingExpenseId = null;
   saveTrips();
   $("#sheet").close();
@@ -902,7 +924,7 @@ function updateRateField() {
   const currency = $("#currency").value;
   $("#rateField").classList.toggle("hidden", currency === "CNY");
   if (currency !== "CNY" && (!$("#rateInput").value || Number($("#rateInput").value) <= 0)) {
-    $("#rateInput").value = rates[currency] || 1;
+    $("#rateInput").value = preferredTripRate(activeTrip(), currency);
   }
   updateConversion();
   updateExpenseSaveState();
@@ -913,7 +935,7 @@ function openRateSheet() {
   const currencies = usedForeignCurrencies(trip);
   $("#rateList").innerHTML = currencies.length ? currencies.map((currency) => {
     const history = rateHistory(trip, currency);
-    const latest = history[history.length - 1] || rates[currency] || 1;
+    const latest = preferredTripRate(trip, currency);
     return `<label>${escapeHtml(currency)} 兑人民币汇率 <span class="req">*</span><input data-rate-currency="${escapeHtml(currency)}" type="number" inputmode="decimal" min="0" step="0.0001" value="${escapeHtml(latest)}"><small>历史录入：${escapeHtml(history.join("，"))}</small></label>`;
   }).join("") : `<p class="empty">本旅行还没有外币账单。</p>`;
   $("#rateSheet").showModal();
@@ -928,6 +950,7 @@ function saveRateBatch() {
   inputs.forEach((input) => {
     const currency = input.dataset.rateCurrency;
     const rate = Number(input.value);
+    RatePolicy.recordBatchRate(trip, currency, rate);
     trip.expenses.forEach((e) => {
       if (e.currency === currency) e.rate = rate;
     });
@@ -1101,7 +1124,7 @@ $("#amount").oninput = () => {
   updateExpenseSaveState();
 };
 $("#currency").onchange = () => {
-  $("#rateInput").value = rates[$("#currency").value] || 1;
+  $("#rateInput").value = preferredTripRate(activeTrip(), $("#currency").value);
   updateRateField();
 };
 $("#rateInput").oninput = () => {
@@ -1120,4 +1143,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=26");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=27");
