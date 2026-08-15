@@ -19,7 +19,6 @@
       <span>我的旅行账本</span>
       <h1 id="tripCount">0 个</h1>
       <p>先建旅行项目，再进入项目记账分摊。</p>
-      <div id="homeAvatars" class="avatars"></div>
     </section>
     <section class="content">
       <div class="section-head"><h2>旅行项目</h2><span>点卡片进入</span></div>
@@ -66,9 +65,13 @@
   <label>旅行名称 <span class="req">*</span><input id="tripName" required placeholder="例如：东京朋友旅行"></label>
   <div class="date-group">
     <span>旅行日期 <em>选填</em></span>
-    <div class="two">
-      <input id="tripStart" type="date" aria-label="开始日期">
-      <input id="tripEnd" type="date" aria-label="结束日期">
+    <button id="tripDateRangeButton" class="date-range-button" type="button">选择开始和结束日期</button>
+    <div id="tripDateRangePanel" class="date-range-panel hidden">
+      <p>先点开始日期，再点结束日期</p>
+      <div class="two">
+        <input id="tripStart" type="date" aria-label="开始日期">
+        <input id="tripEnd" type="date" aria-label="结束日期">
+      </div>
     </div>
   </div>
   <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
@@ -79,7 +82,7 @@
 
 <dialog id="sheet">
   <div class="grab"></div>
-  <div class="sheet-head"><button data-close>取消</button><h2>记一笔</h2><button id="saveTop">保存</button></div>
+  <div class="sheet-head"><button type="button" data-close>取消</button><h2>记一笔</h2><button type="button" id="saveTop">保存</button></div>
   <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>USD</option><option>JPY</option><option>KRW</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
   <p id="conversion"></p>
   <label>日期 <em>选填</em><input id="expenseDate" type="date"></label>
