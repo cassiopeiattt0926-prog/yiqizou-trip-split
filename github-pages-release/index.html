@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#174f3a">
+  <title>一起走 · 旅行记账</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <section id="tripHome">
+    <header>
+      <div class="title left"><b>一起走</b><span>朋友旅行项目</span></div>
+      <button id="newTrip" class="new-trip-btn">＋ 新建旅行</button>
+    </header>
+    <section class="hero">
+      <span>我的旅行账本</span>
+      <h1 id="tripCount">0 个</h1>
+      <p>先建旅行项目，再进入项目记账分摊。</p>
+    </section>
+    <section class="content">
+      <div class="section-head"><h2>旅行项目</h2><span>点卡片进入</span></div>
+      <div id="tripList" class="trip-list"></div>
+    </section>
+  </section>
+
+  <section id="tripDetail" class="hidden">
+    <header>
+      <button id="backHome" class="text-btn">返回</button>
+      <div class="title"><b id="tripTitle">旅行</b><span id="tripMeta"></span></div>
+      <button id="editTrip" class="text-btn">编辑</button>
+    </header>
+    <section class="hero">
+      <span>旅程总支出</span>
+      <h1 id="total">¥0.00</h1>
+      <p id="summary"></p>
+      <div id="avatars" class="avatars"></div>
+    </section>
+    <section id="rateTools" class="rate-tools"></section>
+    <nav><button class="active" data-tab="bills">全部账单</button><button data-tab="settle">谁该付谁</button><button data-tab="stats">个人统计</button></nav>
+    <section id="bills" class="content">
+      <div class="section-head"><h2>最近记录</h2><span>按人民币折算</span></div>
+      <div id="list" class="list"></div>
+      <p class="hint">所有金额按录入时汇率锁定，历史账不会漂移。</p>
+    </section>
+    <section id="settle" class="content hidden">
+      <div class="section-head"><h2>最少转账方案</h2><span id="settleCount"></span></div>
+      <div id="balances"></div>
+      <div class="divider"><span>最小结清方案</span></div>
+      <div id="transfers" class="transfers"></div>
+      <button id="share" class="wide">分享结算单</button>
+    </section>
+    <section id="stats" class="content hidden">
+      <div class="section-head"><h2>个人消费统计</h2><span>按实际分摊</span></div>
+      <div id="statsList" class="stats-list"></div>
+    </section>
+    <button id="add" class="fab">＋ 记一笔</button>
+  </section>
+</main>
+
+<dialog id="tripSheet">
+  <div class="grab"></div>
+  <div class="sheet-head"><button data-trip-close>取消</button><h2 id="tripSheetTitle">新建旅行</h2><button id="saveTripTop">保存</button></div>
+  <label>旅行名称 <span class="req">*</span><input id="tripName" required placeholder="例如：东京朋友旅行"></label>
+  <div class="date-group">
+    <span>旅行日期 <em>选填</em></span>
+    <button id="tripDateRangeButton" class="date-range-button" type="button">选择开始和结束日期</button>
+    <div id="tripDateRangePanel" class="date-range-panel hidden">
+      <div class="calendar-head"><b id="calendarTitle">开始日期</b><span id="calendarMonth"></span></div>
+      <div class="calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+      <p id="calendarHint">先选择开始日期</p>
+    </div>
+    <input id="tripStart" type="hidden">
+    <input id="tripEnd" type="hidden">
+  </div>
+  <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
+  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, bb, qq, xw"></label>
+  <div id="avatarChooser" class="avatar-chooser"></div>
+  <p class="hint small">昵称用逗号或空格分开，之后记账时直接点选。</p>
+  <button id="saveTrip" class="wide">保存旅行项目</button>
+</dialog>
+
+<dialog id="sheet">
+  <div class="grab"></div>
+  <div class="sheet-head"><button type="button" data-close>取消</button><h2>记一笔</h2><button type="button" id="saveTop">保存</button></div>
+  <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>USD</option><option>JPY</option><option>KRW</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
+  <p id="conversion"></p>
+  <label id="rateField" class="hidden">历史兑人民币汇率 <span class="req">*</span><input id="rateInput" type="number" inputmode="decimal" min="0" step="0.0001" placeholder="例如：7.18"></label>
+  <label>日期 <em>选填</em><input id="expenseDate" type="date"></label>
+  <div class="two">
+    <label>类型 <span class="req">*</span><select id="category" required></select></label>
+    <label>谁先付 <span class="req">*</span><select id="payer" required></select></label>
+  </div>
+  <label>谁参与 <span class="req">*</span><div id="peoplePick" class="people-pick"></div></label>
+  <label>事项 <span class="req">*</span><input id="item" required placeholder="例如：机场去酒店"></label>
+  <button id="save" class="wide">保存并平均分摊</button>
+</dialog>
+
+<dialog id="rateSheet">
+  <div class="grab"></div>
+  <div class="sheet-head"><button type="button" data-rate-close>取消</button><h2>批量改汇率</h2><button type="button" id="saveRatesTop">保存</button></div>
+  <p class="hint small left">只展示本旅行录入过的外币。保存后会按新汇率重新计算所有账单、应收应付、结算方案和个人统计。</p>
+  <div id="rateList" class="rate-list"></div>
+  <button id="saveRates" class="wide">保存并重新计算</button>
+</dialog>
+<script src="avatars.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
