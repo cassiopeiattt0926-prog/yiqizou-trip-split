@@ -78,11 +78,10 @@ function dateRange(trip) {
 
 function renderHome() {
   $("#tripCount").textContent = `${trips.length} 个`;
-  $("#homeAvatars").innerHTML = trips.flatMap((t) => t.people).slice(0, 6).map((p) => avatar(p)).join("");
   $("#tripList").innerHTML = trips.map((trip) => {
     const total = trip.expenses.reduce((s, e) => s + e.amount * e.rate, 0);
     return `<article class="trip-card" data-id="${trip.id}">
-      <div><b>${trip.name}</b><span>${dateRange(trip)} · ${trip.people.length}人</span></div>
+      <div><b>${trip.name}</b><span>${dateRange(trip)} · ${trip.people.length}人</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
       <strong>${money(total)}</strong>
     </article>`;
   }).join("");
@@ -191,6 +190,8 @@ function openTripSheet(id = null) {
   $("#tripName").value = trip?.name || "";
   $("#tripStart").value = trip?.startDate || "";
   $("#tripEnd").value = trip?.endDate || "";
+  updateTripDateRangeButton();
+  $("#tripDateRangePanel").classList.add("hidden");
   $("#tripPeopleCount").value = trip?.peopleCount || trip?.people.length || "";
   $("#tripNicknames").value = trip?.people.map((p) => p.name).join(", ") || "";
   $("#tripSheet").showModal();
@@ -207,10 +208,12 @@ function parsePeople(raw, count, existing = []) {
 }
 
 function saveTrip() {
+  clearErrors();
   const name = $("#tripName").value.trim();
   const peopleCount = Number($("#tripPeopleCount").value);
   const nicknames = $("#tripNicknames").value.trim();
-  if (!name || !peopleCount || peopleCount < 1 || !nicknames) return;
+  const firstInvalid = !name ? $("#tripName") : !peopleCount || peopleCount < 1 ? $("#tripPeopleCount") : !nicknames ? $("#tripNicknames") : null;
+  if (firstInvalid) return focusInvalid(firstInvalid);
   const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
   const people = parsePeople($("#tripNicknames").value, peopleCount, currentTrip?.people || []);
   if (editingTripId) {
@@ -223,6 +226,12 @@ function saveTrip() {
   saveTrips();
   $("#tripSheet").close();
   showDetail();
+}
+
+function updateTripDateRangeButton() {
+  const start = $("#tripStart").value;
+  const end = $("#tripEnd").value;
+  $("#tripDateRangeButton").textContent = start && end ? `${start} — ${end}` : start ? `${start} — 选择结束日期` : "选择开始和结束日期";
 }
 
 function setParticipantModeFromSelection(trip, expense) {
@@ -268,20 +277,17 @@ function renderPeoplePick() {
     selected = [...new Set([payerId, ...selected])];
   }
   const isAll = participantMode === "all" && !isBorrow;
-  $("#peoplePick").innerHTML = `<button data-all class="${isAll ? "on" : ""}" ${isBorrow ? "disabled" : ""}>全部</button>` + trip.people.map((p) => {
+  $("#peoplePick").innerHTML = `<button type="button" data-all class="${isAll ? "on" : ""}" ${isBorrow ? "disabled" : ""}>全部</button>` + trip.people.map((p) => {
     const disabled = isBorrow && p.id === payerId;
     const isOn = participantMode === "partial" && selected.includes(p.id);
-    return `<button data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
+    return `<button type="button" data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
   }).join("");
   $("#peoplePick").querySelector("[data-all]").onclick = () => {
-    if (participantMode === "all") {
-      participantMode = "partial";
-      selected = isBorrow ? [] : [payerId];
-    } else {
-      participantMode = "all";
-      selected = trip.people.map((p) => p.id);
-    }
+    if (isBorrow) return;
+    participantMode = "partial";
+    selected = [payerId];
     renderPeoplePick();
+    updateExpenseSaveState();
   };
   $("#peoplePick").querySelectorAll("[data-id]").forEach((button) => {
     button.onclick = () => {
@@ -295,18 +301,23 @@ function renderPeoplePick() {
       }
       if (isBorrow) selected = selected.filter((id) => id !== payerId);
       renderPeoplePick();
+      updateExpenseSaveState();
     };
   });
+  updateExpenseSaveState();
 }
 
 function saveExpense() {
+  clearErrors();
   const trip = activeTrip();
   const amount = Number($("#amount").value);
   const title = $("#item").value.trim();
   const category = $("#category").value;
   const currency = $("#currency").value;
-  if (!amount || !title || !category || !selected.length) return;
-  const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate: rates[currency], payer: $("#payer").value, participants: [...selected], date: $("#expenseDate").value };
+  const validParticipants = selected.filter((id) => trip.people.some((p) => p.id === id));
+  const firstInvalid = !amount ? $("#amount") : !category ? $("#category") : !$("#payer").value ? $("#payer") : !validParticipants.length ? $("#peoplePick") : !title ? $("#item") : null;
+  if (firstInvalid) return focusInvalid(firstInvalid);
+  const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate: rates[currency], payer: $("#payer").value, participants: [...validParticipants], date: $("#expenseDate").value };
   if (editingExpenseId) {
     trip.expenses = trip.expenses.map((e) => e.id === editingExpenseId ? nextExpense : e);
   } else {
@@ -316,6 +327,29 @@ function saveExpense() {
   saveTrips();
   $("#sheet").close();
   renderDetail();
+}
+
+function clearErrors() {
+  document.querySelectorAll(".invalid").forEach((el) => el.classList.remove("invalid"));
+}
+
+function focusInvalid(el) {
+  el.classList.add("invalid");
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  setTimeout(() => {
+    if (el.matches("input,select")) el.focus();
+    else el.querySelector("button:not(:disabled)")?.focus();
+  }, 250);
+}
+
+function updateExpenseSaveState() {
+  const trip = activeTrip();
+  const amount = Number($("#amount").value);
+  const title = $("#item").value.trim();
+  const hasPeople = selected.some((id) => trip?.people.some((p) => p.id === id));
+  const disabled = !amount || !title || !$("#category").value || !$("#payer").value || !hasPeople;
+  $("#save").classList.toggle("soft-disabled", disabled);
+  $("#saveTop").classList.toggle("soft-disabled", disabled);
 }
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -332,15 +366,31 @@ $("#editTrip").onclick = () => openTripSheet(activeTrip().id);
 $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
+$("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
+$("#tripStart").onchange = () => {
+  if ($("#tripEnd").value && $("#tripEnd").value < $("#tripStart").value) $("#tripEnd").value = "";
+  updateTripDateRangeButton();
+  $("#tripEnd").focus();
+};
+$("#tripEnd").onchange = updateTripDateRangeButton;
 $("#add").onclick = () => {
   openExpenseSheet();
 };
 $("[data-close]").onclick = () => $("#sheet").close();
 $("#save").onclick = $("#saveTop").onclick = saveExpense;
-$("#category").onchange = renderPeoplePick;
-$("#payer").onchange = renderPeoplePick;
-$("#currency").onchange = $("#amount").oninput = () => {
+$("#category").onchange = () => {
+  if ($("#category").value === "借用") selected = [];
+  renderPeoplePick();
+  updateExpenseSaveState();
+};
+$("#payer").onchange = () => {
+  renderPeoplePick();
+  updateExpenseSaveState();
+};
+$("#item").oninput = $("#amount").oninput = updateExpenseSaveState;
+$("#currency").onchange = () => {
   $("#conversion").textContent = $("#currency").value === "CNY" ? "" : `约 ${money(Number($("#amount").value || 0) * rates[$("#currency").value])}`;
+  updateExpenseSaveState();
 };
 saveTrips();
 showHome();
