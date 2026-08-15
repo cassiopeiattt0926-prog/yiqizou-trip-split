@@ -67,15 +67,16 @@
     <span>旅行日期 <em>选填</em></span>
     <button id="tripDateRangeButton" class="date-range-button" type="button">选择开始和结束日期</button>
     <div id="tripDateRangePanel" class="date-range-panel hidden">
-      <p>先点开始日期，再点结束日期</p>
-      <div class="two">
-        <input id="tripStart" type="date" aria-label="开始日期">
-        <input id="tripEnd" type="date" aria-label="结束日期">
-      </div>
+      <div class="calendar-head"><b id="calendarTitle">开始日期</b><span id="calendarMonth"></span></div>
+      <div class="calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+      <p id="calendarHint">先选择开始日期</p>
     </div>
+    <input id="tripStart" type="hidden">
+    <input id="tripEnd" type="hidden">
   </div>
   <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
-  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, qy, bb, xw"></label>
+  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, bb, qq, xw"></label>
   <p class="hint small">昵称用逗号或空格分开，之后记账时直接点选。</p>
   <button id="saveTrip" class="wide">保存旅行项目</button>
 </dialog>
