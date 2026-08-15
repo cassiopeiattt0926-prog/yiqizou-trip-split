@@ -30,7 +30,8 @@ const legacySeed = [
   ["森美术馆", "门票", 4000, "JPY", 0.049, "tt", ["tt", "bb"]]
 ].map((x, i) => ({ id: String(i), title: x[0], category: x[1], amount: x[2], currency: x[3], rate: x[4], payer: x[5], participants: x[6] }));
 const $ = (s) => document.querySelector(s);
-const money = (n) => "¥" + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const finiteNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const money = (n) => "¥" + Math.abs(finiteNumber(n)).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const today = () => {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -47,9 +48,17 @@ let calendarCursor = new Date(today().slice(0, 7) + "-01");
 let selectingDatePart = "start";
 
 function loadTrips() {
-  const saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
-  if (saved?.length) return saved;
-  const oldExpenses = JSON.parse(localStorage.getItem("yiqizou-expenses") || "null") || legacySeed;
+  let saved = null;
+  let oldExpenses = null;
+  try {
+    saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
+    oldExpenses = JSON.parse(localStorage.getItem("yiqizou-expenses") || "null");
+  } catch (_) {
+    saved = null;
+  }
+  // 空数组也代表用户已经初始化并删除了全部项目，不能再次生成示例数据。
+  if (Array.isArray(saved)) return saved;
+  oldExpenses = Array.isArray(oldExpenses) ? oldExpenses : legacySeed;
   return [{
     id: crypto.randomUUID(),
     name: "东京朋友旅行",
@@ -66,11 +75,27 @@ function loadTrips() {
 function saveTrips() {
   localStorage.setItem("yiqizou-trips", JSON.stringify(trips));
   if (activeTripId) localStorage.setItem("yiqizou-active-trip", activeTripId);
+  else localStorage.removeItem("yiqizou-active-trip");
 }
 
 function migrateTrip(trip) {
   trip.people = (trip.people || []).map((p, i) => ({ ...p, avatarIndex: p.avatarIndex || (i % avatarCount) + 1 }));
-  trip.expenses = (trip.expenses || []).map((e) => ({ ...e, rate: Number(e.rate || rates[e.currency] || 1) }));
+  const ids = new Set(trip.people.map((p) => p.id));
+  trip.expenses = (trip.expenses || []).map((e) => {
+    const currency = rates[e.currency] ? e.currency : "CNY";
+    const participants = [...new Set((e.participants || []).filter((id) => ids.has(id)))];
+    const payer = ids.has(e.payer) ? e.payer : trip.people[0]?.id;
+    const eligible = trip.people.map((p) => p.id).filter((id) => e.category !== "借用" || id !== payer);
+    const normalizedParticipants = e.category === "借用" ? participants.filter((id) => id !== payer) : participants;
+    return {
+      ...e,
+      currency,
+      amount: finiteNumber(e.amount),
+      rate: currency === "CNY" ? 1 : Math.max(finiteNumber(e.rate, rates[currency] || 1), 0.000001),
+      payer,
+      participants: normalizedParticipants.length ? normalizedParticipants : eligible
+    };
+  }).filter((e) => e.payer && e.participants.length);
   return trip;
 }
 
@@ -94,17 +119,23 @@ function renderHome() {
   $("#tripList").innerHTML = trips.map((trip) => {
     const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
     const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
-    return `<article class="swipe-row" data-trip-id="${trip.id}">
+    return `<article class="swipe-row" data-trip-id="${escapeHtml(trip.id)}">
       <div class="swipe-content trip-card">
-        <div><b>${trip.name}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${dateRange(trip)} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
+        <div><b>${escapeHtml(trip.name)}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${escapeHtml(dateRange(trip))} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
         <strong>${money(total)}</strong>
       </div>
-      <button class="delete-action" type="button" data-delete-trip="${trip.id}">删除</button>
+      <button class="delete-action" type="button" data-delete-trip="${escapeHtml(trip.id)}">删除</button>
     </article>`;
   }).join("");
   setupSwipeRows("#tripList");
   document.querySelectorAll("[data-trip-id] .swipe-content").forEach((card) => {
-    card.onclick = () => {
+    card.onclick = (event) => {
+      const swipeRow = card.closest(".swipe-row");
+      if (swipeRow?.classList.contains("open") || swipeRow?.dataset.suppressClick === "1") {
+        swipeRow.classList.remove("open");
+        event.preventDefault();
+        return;
+      }
       activeTripId = card.closest("[data-trip-id]").dataset.tripId;
       saveTrips();
       showDetail();
@@ -133,21 +164,21 @@ function showDetail() {
 function avatar(p) {
   const idx = ((Number(p.avatarIndex) || 1) - 1) % avatarCount + 1;
   const src = window.CAT_AVATARS?.[idx - 1] || `${avatarBase}/cat-${String(idx).padStart(2, "0")}.png`;
-  return `<span class="avatar"><img alt="${p.name}" src="${src}"></span>`;
+  return `<span class="avatar"><img alt="${escapeHtml(p.name)}" src="${escapeHtml(src)}"></span>`;
 }
 
 function rateOf(expense) {
-  return Number(expense.rate || rates[expense.currency] || 1);
+  return Math.max(finiteNumber(expense.rate, rates[expense.currency] || 1), 0.000001);
 }
 
 function cnyAmount(expense) {
-  return Number(expense.amount || 0) * rateOf(expense);
+  return Math.max(finiteNumber(expense.amount), 0) * rateOf(expense);
 }
 
 function calc(trip) {
   return Object.fromEntries(trip.people.map((p) => [p.id, trip.expenses.reduce((s, e) => {
     const paid = e.payer === p.id ? cnyAmount(e) : 0;
-    const owed = e.participants.includes(p.id) ? cnyAmount(e) / e.participants.length : 0;
+    const owed = e.participants.includes(p.id) && e.participants.length ? cnyAmount(e) / e.participants.length : 0;
     return s + paid - owed;
   }, 0)]));
 }
@@ -175,6 +206,8 @@ function renderDetail() {
   const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
   $("#tripTitle").textContent = trip.name;
   $("#tripMeta").textContent = dateRange(trip);
+  const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+  $("#detailDemoBanner").classList.toggle("hidden", !isDemo);
   $("#total").textContent = money(total);
   $("#summary").textContent = `${trip.expenses.length} 笔 · ${trip.people.length} 位朋友 · 人民币结算`;
   $("#avatars").innerHTML = trip.people.map(avatar).join("");
@@ -183,14 +216,22 @@ function renderDetail() {
     const payer = person(trip, e.payer);
     const dateText = e.date ? `${e.date} · ` : "";
     const rateText = e.currency === "CNY" ? "" : ` · 汇率 ${rateOf(e)}`;
-    return `<article class="swipe-row" data-expense-row="${e.id}">
-      <div class="swipe-content expense" data-expense-id="${e.id}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与${rateText}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></div>
-      <button class="delete-action" type="button" data-delete-expense="${e.id}">删除</button>
+    return `<article class="swipe-row" data-expense-row="${escapeHtml(e.id)}">
+      <div class="swipe-content expense" data-expense-id="${escapeHtml(e.id)}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${escapeHtml(e.title)}</b><span>${escapeHtml(dateText)}${escapeHtml(e.category)} · ${escapeHtml(payer.name)} 先付 · ${e.participants.length}人参与${escapeHtml(rateText)}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${escapeHtml(symbols[e.currency] || "")}${finiteNumber(e.amount).toLocaleString()} ${escapeHtml(e.currency)}</span></div></div>
+      <button class="delete-action" type="button" data-delete-expense="${escapeHtml(e.id)}">删除</button>
     </article>`;
   }).join("") : `<p class="empty">还没有记录，点下方“记一笔”。</p>`;
   setupSwipeRows("#list");
   document.querySelectorAll("[data-expense-id]").forEach((row) => {
-    row.onclick = () => openExpenseSheet(row.dataset.expenseId);
+    row.onclick = (event) => {
+      const swipeRow = row.closest(".swipe-row");
+      if (swipeRow?.classList.contains("open") || swipeRow?.dataset.suppressClick === "1") {
+        swipeRow.classList.remove("open");
+        event.preventDefault();
+        return;
+      }
+      openExpenseSheet(row.dataset.expenseId);
+    };
   });
   document.querySelectorAll("[data-delete-expense]").forEach((button) => {
     button.onclick = (event) => {
@@ -200,10 +241,21 @@ function renderDetail() {
   });
   const balances = calc(trip);
   const transfers = settle(trip, balances);
-  $("#balances").innerHTML = trip.people.map((p) => `<div class="balance">${avatar(p)}<div><b>${p.name}</b><small>${balances[p.id] >= 0 ? "应收" : "应付"}</small></div><strong class="${balances[p.id] >= 0 ? "receive" : "pay"}">${balances[p.id] >= 0 ? "+" : "−"}${money(balances[p.id])}</strong></div>`).join("");
+  $("#balances").innerHTML = trip.people.map((p) => `<div class="balance">${avatar(p)}<div><b>${escapeHtml(p.name)}</b><small>${balances[p.id] >= 0 ? "应收" : "应付"}</small></div><strong class="${balances[p.id] >= 0 ? "receive" : "pay"}">${balances[p.id] >= 0 ? "+" : "−"}${money(balances[p.id])}</strong></div>`).join("");
   $("#settleCount").textContent = `${transfers.length} 笔即可结清`;
-  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
-  $("#share").onclick = () => navigator.share?.({ title: `${trip.name}结算`, text: transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清" });
+  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${escapeHtml(person(trip, x.from).name)} 支付给 ${escapeHtml(person(trip, x.to).name)}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
+  $("#share").onclick = async () => {
+    const text = transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清";
+    try {
+      if (navigator.share) await navigator.share({ title: `${trip.name}结算`, text });
+      else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        showToast("结算方案已复制");
+      } else showToast("当前浏览器暂不支持分享");
+    } catch (error) {
+      if (error?.name !== "AbortError") showToast("分享未完成，请稍后再试");
+    }
+  };
   renderStats(trip);
 }
 
@@ -227,9 +279,11 @@ function setupSwipeRows(scope) {
       const touch = event.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
-      currentX = 0;
+      currentX = row.classList.contains("open") ? -82 : 0;
       dragging = true;
       horizontal = false;
+      row.dataset.suppressClick = "0";
+      row.classList.add("dragging");
       closeSwipeRows(row);
     }, { passive: true });
     row.addEventListener("touchmove", (event) => {
@@ -245,8 +299,10 @@ function setupSwipeRows(scope) {
     }, { passive: false });
     row.addEventListener("touchend", () => {
       if (!dragging) return;
+      row.classList.remove("dragging");
       if (content) content.style.transform = "";
       if (horizontal) {
+        row.dataset.suppressClick = "1";
         if (currentX < -22) {
           closeSwipeRows(row);
           row.classList.add("open");
@@ -256,6 +312,7 @@ function setupSwipeRows(scope) {
       }
       dragging = false;
       horizontal = false;
+      setTimeout(() => row.dataset.suppressClick = "0", 320);
     }, { passive: true });
     row.addEventListener("click", (event) => {
       if (row.classList.contains("open") && !event.target.closest(".delete-action")) {
@@ -265,6 +322,15 @@ function setupSwipeRows(scope) {
       }
     });
   });
+}
+
+function showToast(message) {
+  document.querySelector(".app-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "app-toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2200);
 }
 
 function deleteTrip(id) {
@@ -313,7 +379,7 @@ function renderRateTools(trip) {
 }
 
 function statsFor(trip, personId) {
-  const rows = trip.expenses.filter((e) => e.participants.includes(personId)).map((e) => ({ ...e, share: cnyAmount(e) / e.participants.length }));
+  const rows = trip.expenses.filter((e) => e.participants.includes(personId) && e.participants.length).map((e) => ({ ...e, share: cnyAmount(e) / e.participants.length }));
   const total = rows.reduce((s, e) => s + e.share, 0);
   const cats = {};
   rows.forEach((e) => {
@@ -327,9 +393,9 @@ function renderStats(trip) {
     const stat = statsFor(trip, p.id);
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
     return `<details class="stat-card">
-      <summary>${avatar(p)}<div><b>${p.name}</b><span>个人消费金额总计</span></div><strong class="stat-total">${money(stat.total)}</strong></summary>
-      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${cat}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
-      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${e.title}</b><small>${e.date ? `${e.date} · ` : ""}${e.category}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
+      <summary>${avatar(p)}<div><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><strong class="stat-total">${money(stat.total)}</strong></summary>
+      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
+      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
     </details>`;
   }).join("");
 }
@@ -351,7 +417,10 @@ function openTripSheet(id = null) {
   $("#tripPeopleCount").value = trip?.peopleCount || trip?.people.length || "";
   $("#tripNicknames").value = trip?.people.map((p) => p.name).join(", ") || "";
   syncAvatarDrafts();
+  updateTripSaveState();
+  clearErrors();
   $("#tripSheet").showModal();
+  $("#tripSheet").scrollTop = 0;
 }
 
 function splitNames(raw) {
@@ -375,7 +444,11 @@ function syncAvatarDrafts() {
   const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
   const total = Math.max(0, count || names.length);
   for (let i = 0; i < total; i++) {
-    if (!draftAvatarMap[i]) draftAvatarMap[i] = currentTrip?.people?.[i]?.avatarIndex || (i % avatarCount) + 1;
+    if (!draftAvatarMap[i]) {
+      const preferred = currentTrip?.people?.[i]?.avatarIndex || (i % avatarCount) + 1;
+      const used = new Set(Object.entries(draftAvatarMap).filter(([key]) => Number(key) !== i).map(([, value]) => value));
+      draftAvatarMap[i] = used.has(preferred) ? firstUnusedAvatar(used) : preferred;
+    }
   }
   renderAvatarChooser(total, names);
 }
@@ -389,21 +462,41 @@ function renderAvatarChooser(count, names = splitNames($("#tripNicknames").value
     const name = names[i] || `朋友${i + 1}`;
     const idx = draftAvatarMap[i] || (i % avatarCount) + 1;
     const src = window.CAT_AVATARS?.[idx - 1] || `${avatarBase}/cat-${String(idx).padStart(2, "0")}.png`;
-    return `<button type="button" data-avatar-person="${i}"><img alt="${name}" src="${src}"><span>${name}</span></button>`;
+    return `<button type="button" data-avatar-person="${i}"><img alt="${escapeHtml(name)}" src="${escapeHtml(src)}"><span>${escapeHtml(name)}</span></button>`;
   }).join("")}</div>`;
+}
+
+function firstUnusedAvatar(used, after = 0) {
+  for (let offset = 1; offset <= avatarCount; offset++) {
+    const candidate = ((after + offset - 1) % avatarCount) + 1;
+    if (!used.has(candidate)) return candidate;
+  }
+  return ((after || 1) % avatarCount) + 1;
+}
+
+function updateTripSaveState() {
+  const name = $("#tripName").value.trim();
+  const peopleCount = Number($("#tripPeopleCount").value);
+  const names = splitNames($("#tripNicknames").value);
+  const disabled = !name || !Number.isInteger(peopleCount) || peopleCount < 1 || names.length !== peopleCount;
+  $("#saveTrip").classList.toggle("soft-disabled", disabled);
+  $("#saveTripTop").classList.toggle("soft-disabled", disabled);
+  $("#saveTrip").setAttribute("aria-disabled", String(disabled));
+  $("#saveTripTop").setAttribute("aria-disabled", String(disabled));
 }
 
 function saveTrip() {
   clearErrors();
   const name = $("#tripName").value.trim();
   const peopleCount = Number($("#tripPeopleCount").value);
-  const nicknames = $("#tripNicknames").value.trim();
-  const firstInvalid = !name ? $("#tripName") : !peopleCount || peopleCount < 1 ? $("#tripPeopleCount") : !nicknames ? $("#tripNicknames") : null;
+  const names = splitNames($("#tripNicknames").value);
+  const firstInvalid = !name ? $("#tripName") : !Number.isInteger(peopleCount) || peopleCount < 1 ? $("#tripPeopleCount") : names.length !== peopleCount ? $("#tripNicknames") : null;
   if (firstInvalid) return focusInvalid(firstInvalid);
   const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
   const people = parsePeople($("#tripNicknames").value, peopleCount, currentTrip?.people || []);
   if (editingTripId) {
     Object.assign(currentTrip, { name, destination: "", startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people });
+    migrateTrip(currentTrip);
   } else {
     const trip = { id: crypto.randomUUID(), name, destination: "", startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people, expenses: [] };
     trips.unshift(trip);
@@ -474,7 +567,7 @@ function setParticipantModeFromSelection(trip, expense) {
 
 function resetExpenseForm(expense = null) {
   const trip = activeTrip();
-  $("#payer").innerHTML = trip.people.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+  $("#payer").innerHTML = trip.people.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
   $("#category").innerHTML = typeOptions.map(([name, icon]) => `<option value="${name}">${icon} ${name}</option>`).join("");
   editingExpenseId = expense?.id || null;
   selected = expense ? [...expense.participants] : trip.people.map((p) => p.id);
@@ -485,11 +578,14 @@ function resetExpenseForm(expense = null) {
   $("#expenseDate").value = expense?.date || today();
   $("#currency").value = expense?.currency || "CNY";
   $("#category").value = expense?.category || $("#category").value;
+  $("#category").dataset.previousCategory = $("#category").value;
   $("#payer").value = expense?.payer || $("#payer").value;
   $("#rateInput").value = expense?.rate || rates[$("#currency").value] || 1;
   updateConversion();
   updateRateField();
   renderPeoplePick();
+  clearErrors();
+  $("#sheetTitle").textContent = expense ? "编辑账单" : "记一笔";
 }
 
 function openExpenseSheet(id = null) {
@@ -497,6 +593,7 @@ function openExpenseSheet(id = null) {
   const expense = id ? trip.expenses.find((e) => e.id === id) : null;
   resetExpenseForm(expense);
   $("#sheet").showModal();
+  $("#sheet").scrollTop = 0;
 }
 
 function renderPeoplePick() {
@@ -515,7 +612,7 @@ function renderPeoplePick() {
   $("#peoplePick").innerHTML = `<button type="button" data-all class="${isAll ? "on" : ""}" ${isBorrow ? "disabled" : ""}>全部</button>` + trip.people.map((p) => {
     const disabled = isBorrow && p.id === payerId;
     const isOn = participantMode === "partial" && selected.includes(p.id);
-    return `<button type="button" data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
+    return `<button type="button" data-id="${escapeHtml(p.id)}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${escapeHtml(p.name)}</button>`;
   }).join("");
   updateExpenseSaveState();
 }
@@ -631,6 +728,8 @@ function updateExpenseSaveState() {
   const disabled = invalidAmount || invalidRate || !title || !$("#category").value || !$("#payer").value || !hasPeople;
   $("#save").classList.toggle("soft-disabled", disabled);
   $("#saveTop").classList.toggle("soft-disabled", disabled);
+  $("#save").setAttribute("aria-disabled", String(disabled));
+  $("#saveTop").setAttribute("aria-disabled", String(disabled));
 }
 
 function updateConversion() {
@@ -657,7 +756,7 @@ function openRateSheet() {
   $("#rateList").innerHTML = currencies.length ? currencies.map((currency) => {
     const history = rateHistory(trip, currency);
     const latest = history[history.length - 1] || rates[currency] || 1;
-    return `<label>${currency} 兑人民币汇率 <span class="req">*</span><input data-rate-currency="${currency}" type="number" inputmode="decimal" min="0" step="0.0001" value="${latest}"><small>历史录入：${history.join("，")}</small></label>`;
+    return `<label>${escapeHtml(currency)} 兑人民币汇率 <span class="req">*</span><input data-rate-currency="${escapeHtml(currency)}" type="number" inputmode="decimal" min="0" step="0.0001" value="${escapeHtml(latest)}"><small>历史录入：${escapeHtml(history.join("，"))}</small></label>`;
   }).join("") : `<p class="empty">本旅行还没有外币账单。</p>`;
   $("#rateSheet").showModal();
 }
@@ -695,19 +794,26 @@ $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
+$("#tripName").oninput = () => {
+  $("#tripName").classList.remove("invalid");
+  updateTripSaveState();
+};
 $("#tripPeopleCount").oninput = () => {
   $("#tripPeopleCount").classList.remove("invalid");
   syncAvatarDrafts();
+  updateTripSaveState();
 };
 $("#tripNicknames").oninput = () => {
   $("#tripNicknames").classList.remove("invalid");
   syncAvatarDrafts();
+  updateTripSaveState();
 };
 $("#avatarChooser").onclick = (event) => {
   const button = event.target.closest("[data-avatar-person]");
   if (!button) return;
   const i = Number(button.dataset.avatarPerson);
-  draftAvatarMap[i] = ((draftAvatarMap[i] || i + 1) % avatarCount) + 1;
+  const used = new Set(Object.entries(draftAvatarMap).filter(([key]) => Number(key) !== i).map(([, value]) => value));
+  draftAvatarMap[i] = firstUnusedAvatar(used, draftAvatarMap[i] || i + 1);
   syncAvatarDrafts();
 };
 $("#calendarMonth").onclick = (event) => {
@@ -727,7 +833,15 @@ $("[data-rate-close]").onclick = () => $("#rateSheet").close();
 $("#saveRates").onclick = $("#saveRatesTop").onclick = saveRateBatch;
 $("#save").onclick = $("#saveTop").onclick = saveExpense;
 $("#category").onchange = () => {
-  if ($("#category").value === "借用") selected = [];
+  const previous = $("#category").dataset.previousCategory;
+  if ($("#category").value === "借用") {
+    participantMode = "partial";
+    selected = [];
+  } else if (previous === "借用") {
+    participantMode = "all";
+    selected = activeTrip().people.map((p) => p.id);
+  }
+  $("#category").dataset.previousCategory = $("#category").value;
   renderPeoplePick();
   updateExpenseSaveState();
 };
@@ -748,15 +862,12 @@ $("#rateInput").oninput = () => {
   updateConversion();
   updateExpenseSaveState();
 };
-$("#peoplePick").addEventListener("pointerup", (event) => {
-  const button = event.target.closest("button");
-  if (button) toggleParticipant(button);
-});
 $("#peoplePick").addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (button) {
     event.preventDefault();
     event.stopPropagation();
+    toggleParticipant(button);
   }
 });
 saveTrips();
