@@ -1,11 +1,11 @@
-const CACHE_NAME = "yiqizou-v22";
+const CACHE_NAME = "yiqizou-v23";
 const APP_FILES = [
   "./",
-  "index.html?v=22",
-  "style.css?v=22",
-  "avatars.js?v=22",
-  "app.js?v=22",
-  "manifest.webmanifest?v=22",
+  "index.html?v=23",
+  "style.css?v=23",
+  "avatars.js?v=23",
+  "app.js?v=23",
+  "manifest.webmanifest?v=23",
   "assets/avatars/cat-01.png"
 ];
 
