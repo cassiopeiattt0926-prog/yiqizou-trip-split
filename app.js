@@ -300,13 +300,13 @@ function resetExpenseForm(expense = null) {
   selected = expense ? [...expense.participants] : trip.people.map((p) => p.id);
   if (expense) setParticipantModeFromSelection(trip, expense);
   else participantMode = "all";
-  $("#amount").value = expense?.amount || "";
+  $("#amount").value = expense?.amount ?? "";
   $("#item").value = expense?.title || "";
   $("#expenseDate").value = expense?.date || today();
   $("#currency").value = expense?.currency || "CNY";
   $("#category").value = expense?.category || $("#category").value;
   $("#payer").value = expense?.payer || $("#payer").value;
-  $("#conversion").textContent = "";
+  updateConversion();
   renderPeoplePick();
 }
 
@@ -365,12 +365,14 @@ function toggleParticipant(target) {
 function saveExpense() {
   clearErrors();
   const trip = activeTrip();
-  const amount = Number($("#amount").value);
+  const rawAmount = $("#amount").value.trim();
+  const amount = Number(rawAmount);
   const title = $("#item").value.trim();
   const category = $("#category").value;
   const currency = $("#currency").value;
   const validParticipants = selected.filter((id) => trip.people.some((p) => p.id === id));
-  const firstInvalid = !amount ? $("#amount") : !category ? $("#category") : !$("#payer").value ? $("#payer") : !validParticipants.length ? $("#peoplePick") : !title ? $("#item") : null;
+  const invalidAmount = rawAmount === "" || Number.isNaN(amount) || amount <= 0;
+  const firstInvalid = invalidAmount ? $("#amount") : !category ? $("#category") : !$("#payer").value ? $("#payer") : !validParticipants.length ? $("#peoplePick") : !title ? $("#item") : null;
   if (firstInvalid) return focusInvalid(firstInvalid);
   const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate: rates[currency], payer: $("#payer").value, participants: [...validParticipants], date: $("#expenseDate").value };
   if (editingExpenseId) {
@@ -399,12 +401,21 @@ function focusInvalid(el) {
 
 function updateExpenseSaveState() {
   const trip = activeTrip();
-  const amount = Number($("#amount").value);
+  const rawAmount = $("#amount").value.trim();
+  const amount = Number(rawAmount);
   const title = $("#item").value.trim();
   const hasPeople = selected.some((id) => trip?.people.some((p) => p.id === id));
-  const disabled = !amount || !title || !$("#category").value || !$("#payer").value || !hasPeople;
+  const invalidAmount = rawAmount === "" || Number.isNaN(amount) || amount <= 0;
+  const disabled = invalidAmount || !title || !$("#category").value || !$("#payer").value || !hasPeople;
   $("#save").classList.toggle("soft-disabled", disabled);
   $("#saveTop").classList.toggle("soft-disabled", disabled);
+}
+
+function updateConversion() {
+  const rawAmount = $("#amount").value.trim();
+  const amount = Number(rawAmount || 0);
+  const currency = $("#currency").value;
+  $("#conversion").textContent = currency === "CNY" ? "" : `约 ${money((Number.isNaN(amount) ? 0 : amount) * rates[currency])}`;
 }
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -445,9 +456,13 @@ $("#payer").onchange = () => {
   renderPeoplePick();
   updateExpenseSaveState();
 };
-$("#item").oninput = $("#amount").oninput = updateExpenseSaveState;
+$("#item").oninput = updateExpenseSaveState;
+$("#amount").oninput = () => {
+  updateConversion();
+  updateExpenseSaveState();
+};
 $("#currency").onchange = () => {
-  $("#conversion").textContent = $("#currency").value === "CNY" ? "" : `约 ${money(Number($("#amount").value || 0) * rates[$("#currency").value])}`;
+  updateConversion();
   updateExpenseSaveState();
 };
 $("#peoplePick").addEventListener("pointerup", (event) => {
