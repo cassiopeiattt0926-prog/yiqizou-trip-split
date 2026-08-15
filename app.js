@@ -1,5 +1,5 @@
-const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, USD: 7.18, EUR: 7.85 };
-const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", USD: "$", EUR: "€" };
+const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, EUR: 7.85 };
+const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", EUR: "€" };
 const typeOptions = [
   ["酒店", "🛏️"],
   ["机票", "✈️"],
@@ -30,7 +30,8 @@ const legacySeed = [
   ["森美术馆", "门票", 4000, "JPY", 0.049, "tt", ["tt", "bb"]]
 ].map((x, i) => ({ id: String(i), title: x[0], category: x[1], amount: x[2], currency: x[3], rate: x[4], payer: x[5], participants: x[6] }));
 const $ = (s) => document.querySelector(s);
-const money = (n) => "¥" + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const finiteNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const money = (n) => "¥" + Math.abs(finiteNumber(n)).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const today = () => {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -47,12 +48,21 @@ let calendarCursor = new Date(today().slice(0, 7) + "-01");
 let selectingDatePart = "start";
 
 function loadTrips() {
-  const saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
-  if (saved?.length) return saved;
-  const oldExpenses = JSON.parse(localStorage.getItem("yiqizou-expenses") || "null") || legacySeed;
+  let saved = null;
+  let oldExpenses = null;
+  try {
+    saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
+    oldExpenses = JSON.parse(localStorage.getItem("yiqizou-expenses") || "null");
+  } catch (_) {
+    saved = null;
+  }
+  // 空数组也代表用户已经初始化并删除了全部项目，不能再次生成示例数据。
+  if (Array.isArray(saved)) return saved;
+  oldExpenses = Array.isArray(oldExpenses) ? oldExpenses : legacySeed;
   return [{
     id: crypto.randomUUID(),
     name: "东京朋友旅行",
+    demo: true,
     destination: "",
     startDate: "2026-08-12",
     endDate: "2026-08-17",
@@ -65,11 +75,27 @@ function loadTrips() {
 function saveTrips() {
   localStorage.setItem("yiqizou-trips", JSON.stringify(trips));
   if (activeTripId) localStorage.setItem("yiqizou-active-trip", activeTripId);
+  else localStorage.removeItem("yiqizou-active-trip");
 }
 
 function migrateTrip(trip) {
   trip.people = (trip.people || []).map((p, i) => ({ ...p, avatarIndex: p.avatarIndex || (i % avatarCount) + 1 }));
-  trip.expenses = (trip.expenses || []).map((e) => ({ ...e, rate: Number(e.rate || rates[e.currency] || 1) }));
+  const ids = new Set(trip.people.map((p) => p.id));
+  trip.expenses = (trip.expenses || []).map((e) => {
+    const currency = rates[e.currency] ? e.currency : "CNY";
+    const participants = [...new Set((e.participants || []).filter((id) => ids.has(id)))];
+    const payer = ids.has(e.payer) ? e.payer : trip.people[0]?.id;
+    const eligible = trip.people.map((p) => p.id).filter((id) => e.category !== "借用" || id !== payer);
+    const normalizedParticipants = e.category === "借用" ? participants.filter((id) => id !== payer) : participants;
+    return {
+      ...e,
+      currency,
+      amount: finiteNumber(e.amount),
+      rate: currency === "CNY" ? 1 : Math.max(finiteNumber(e.rate, rates[currency] || 1), 0.000001),
+      payer,
+      participants: normalizedParticipants.length ? normalizedParticipants : eligible
+    };
+  }).filter((e) => e.payer && e.participants.length);
   return trip;
 }
 
@@ -92,16 +118,33 @@ function renderHome() {
   if ($("#tripCount")) $("#tripCount").textContent = `${trips.length} 个`;
   $("#tripList").innerHTML = trips.map((trip) => {
     const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
-    return `<article class="trip-card" data-id="${trip.id}">
-      <div><b>${trip.name}</b><span>${dateRange(trip)} · ${trip.people.length}人</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
-      <strong>${money(total)}</strong>
+    const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+    return `<article class="swipe-row" data-trip-id="${escapeHtml(trip.id)}">
+      <div class="swipe-content trip-card">
+        <div><b>${escapeHtml(trip.name)}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${escapeHtml(dateRange(trip))} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
+        <strong>${money(total)}</strong>
+      </div>
+      <button class="delete-action" type="button" data-delete-trip="${escapeHtml(trip.id)}">删除</button>
     </article>`;
   }).join("");
-  document.querySelectorAll(".trip-card").forEach((card) => {
-    card.onclick = () => {
-      activeTripId = card.dataset.id;
+  setupSwipeRows("#tripList");
+  document.querySelectorAll("[data-trip-id] .swipe-content").forEach((card) => {
+    card.onclick = (event) => {
+      const swipeRow = card.closest(".swipe-row");
+      if (swipeRow?.classList.contains("open") || swipeRow?.dataset.suppressClick === "1") {
+        swipeRow.classList.remove("open");
+        event.preventDefault();
+        return;
+      }
+      activeTripId = card.closest("[data-trip-id]").dataset.tripId;
       saveTrips();
       showDetail();
+    };
+  });
+  document.querySelectorAll("[data-delete-trip]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      deleteTrip(button.dataset.deleteTrip);
     };
   });
 }
@@ -121,21 +164,21 @@ function showDetail() {
 function avatar(p) {
   const idx = ((Number(p.avatarIndex) || 1) - 1) % avatarCount + 1;
   const src = window.CAT_AVATARS?.[idx - 1] || `${avatarBase}/cat-${String(idx).padStart(2, "0")}.png`;
-  return `<span class="avatar"><img alt="${p.name}" src="${src}"></span>`;
+  return `<span class="avatar"><img alt="${escapeHtml(p.name)}" src="${escapeHtml(src)}"></span>`;
 }
 
 function rateOf(expense) {
-  return Number(expense.rate || rates[expense.currency] || 1);
+  return Math.max(finiteNumber(expense.rate, rates[expense.currency] || 1), 0.000001);
 }
 
 function cnyAmount(expense) {
-  return Number(expense.amount || 0) * rateOf(expense);
+  return Math.max(finiteNumber(expense.amount), 0) * rateOf(expense);
 }
 
 function calc(trip) {
   return Object.fromEntries(trip.people.map((p) => [p.id, trip.expenses.reduce((s, e) => {
     const paid = e.payer === p.id ? cnyAmount(e) : 0;
-    const owed = e.participants.includes(p.id) ? cnyAmount(e) / e.participants.length : 0;
+    const owed = e.participants.includes(p.id) && e.participants.length ? cnyAmount(e) / e.participants.length : 0;
     return s + paid - owed;
   }, 0)]));
 }
@@ -155,6 +198,13 @@ function settle(trip, balances) {
     if (creditors[j].n < 0.01) j++;
   }
   return out;
+}
+
+function settlementShareText(trip, transfers) {
+  const lines = transfers.length
+    ? transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`)
+    : ["已结清"];
+  return ["好友记 · 旅行结算单", trip.name, ...lines, "金额均按人民币结算"].join("\n");
 }
 
 function roundedRect(ctx, x, y, width, height, radius) {
@@ -192,114 +242,110 @@ function fitCanvasText(ctx, text, maxWidth) {
   const source = String(text || "");
   if (ctx.measureText(source).width <= maxWidth) return source;
   let value = source;
-  while (value.length > 1 && ctx.measureText(value + "…").width > maxWidth) value = value.slice(0, -1);
-  return value + "…";
+  while (value.length > 1 && ctx.measureText(`${value}…`).width > maxWidth) value = value.slice(0, -1);
+  return `${value}…`;
 }
 
-function settlementImageBlob(trip, transfers) {
+function settlementShareFile(trip, transfers) {
   const width = 1080;
-  const rowCount = Math.max(1, transfers.length);
+  const rowCount = Math.max(transfers.length, 1);
   const height = 650 + rowCount * 150;
   const total = trip.expenses.reduce((sum, expense) => sum + cnyAmount(expense), 0);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
   ctx.fillStyle = "#f7f8f3";
   ctx.fillRect(0, 0, width, height);
 
   drawShareLogo(ctx, 70, 54, 1.35);
   ctx.fillStyle = "#073f30";
-  ctx.font = "700 54px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
+  ctx.font = '700 54px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("好友记", 225, 112);
   ctx.fillStyle = "#718078";
-  ctx.font = "28px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
+  ctx.font = '28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("好友记 好游记 游玩算账更轻易", 225, 158);
 
-  roundedRect(ctx, 60, 205, 960, 245, 42);
   ctx.fillStyle = "#174f3a";
+  roundedRect(ctx, 60, 205, 960, 245, 42);
   ctx.fill();
   ctx.fillStyle = "#c7dfd2";
-  ctx.font = "30px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
+  ctx.font = '30px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("旅行结算单", 110, 270);
   ctx.fillStyle = "#ffffff";
-  ctx.font = "700 56px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
-  ctx.fillText(fitCanvasText(ctx, trip.name, 500), 110, 345);
+  ctx.font = '700 56px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  const tripName = String(trip.name || "旅行");
+  ctx.fillText(fitCanvasText(ctx, tripName, 500), 110, 345);
   ctx.textAlign = "right";
   ctx.font = "56px Georgia, serif";
   ctx.fillText(money(total), 970, 345);
   ctx.textAlign = "left";
   ctx.fillStyle = "#c7dfd2";
-  ctx.font = "28px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
+  ctx.font = '28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText(`${dateRange(trip)} · ${trip.people.length} 位朋友`, 110, 402);
 
   ctx.fillStyle = "#17211d";
-  ctx.font = "700 42px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
+  ctx.font = '700 42px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("最小结清方案", 70, 535);
-  ctx.fillStyle = "#718078";
-  ctx.font = "28px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
   ctx.textAlign = "right";
+  ctx.fillStyle = "#718078";
+  ctx.font = '28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText(transfers.length ? `${transfers.length} 笔即可结清` : "当前已结清", 1010, 535);
-  ctx.textAlign = "left";
 
   const rows = transfers.length ? transfers : [{ settled: true }];
   rows.forEach((transfer, index) => {
     const y = 575 + index * 150;
-    roundedRect(ctx, 60, y, 960, 118, 28);
     ctx.fillStyle = "#ffffff";
+    roundedRect(ctx, 60, y, 960, 118, 28);
     ctx.fill();
     ctx.strokeStyle = "#e1e5dc";
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = transfer.settled ? "#174f3a" : "#17211d";
-    ctx.font = "700 35px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
-    const label = transfer.settled ? "大家已经结清" : `${person(trip, transfer.from).name}  支付给  ${person(trip, transfer.to).name}`;
-    ctx.fillText(fitCanvasText(ctx, label, 650), 100, y + 72);
-    if (!transfer.settled) {
-      ctx.fillStyle = "#174f3a";
-      ctx.textAlign = "right";
-      ctx.fillText(money(transfer.n), 980, y + 72);
-      ctx.textAlign = "left";
-    }
-  });
-
-  ctx.fillStyle = "#98a49d";
-  ctx.font = "24px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("由好友记生成 · 游玩算账更轻易", width / 2, height - 40);
-  ctx.textAlign = "left";
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("无法生成结算图片")), "image/png"));
-}
-
-async function shareSettlement(trip, transfers) {
-  const button = $("#share");
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = "正在生成结算图片…";
-  try {
-    const blob = await settlementImageBlob(trip, transfers);
-    const safeName = (trip.name || "旅行").replace(/[\\/:*?"<>|]/g, "-");
-    const file = new File([blob], `好友记-${safeName}-结算单.png`, { type: "image/png" });
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file] });
-    } else {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = file.name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(link.href), 3000);
-      button.textContent = "结算图片已保存";
-      setTimeout(() => button.textContent = originalText, 1800);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#17211d";
+    ctx.font = '700 35px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    if (transfer.settled) {
+      ctx.fillText("大家已经结清", 100, y + 72);
       return;
     }
-  } catch (error) {
-    if (error?.name !== "AbortError") console.error(error);
-  } finally {
-    button.disabled = false;
-    if (button.textContent === "正在生成结算图片…") button.textContent = originalText;
+    const from = person(trip, transfer.from).name;
+    const to = person(trip, transfer.to).name;
+    ctx.fillText(fitCanvasText(ctx, `${from} 支付给 ${to}`, 650), 100, y + 72);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#174f3a";
+    ctx.fillText(money(transfer.n), 980, y + 72);
+  });
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#98a49d";
+  ctx.font = '24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("由好友记生成 · 游玩算账更轻易", width / 2, height - 40);
+
+  const dataUrl = canvas.toDataURL("image/png");
+  const binary = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const safeName = tripName.replace(/[\\/:*?"<>|]/g, "-").slice(0, 30) || "旅行";
+  return new File([bytes], `好友记-${safeName}-结算单.png`, { type: "image/png" });
+}
+
+async function copySettlementText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
   }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand?.("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard unavailable");
 }
 
 function renderDetail() {
@@ -308,6 +354,8 @@ function renderDetail() {
   const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
   $("#tripTitle").textContent = trip.name;
   $("#tripMeta").textContent = dateRange(trip);
+  const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+  $("#detailDemoBanner").classList.toggle("hidden", !isDemo);
   $("#total").textContent = money(total);
   $("#summary").textContent = `${trip.expenses.length} 笔 · ${trip.people.length} 位朋友 · 人民币结算`;
   $("#avatars").innerHTML = trip.people.map(avatar).join("");
@@ -316,18 +364,161 @@ function renderDetail() {
     const payer = person(trip, e.payer);
     const dateText = e.date ? `${e.date} · ` : "";
     const rateText = e.currency === "CNY" ? "" : ` · 汇率 ${rateOf(e)}`;
-    return `<article class="expense" data-expense-id="${e.id}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与${rateText}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></article>`;
+    return `<article class="swipe-row" data-expense-row="${escapeHtml(e.id)}">
+      <div class="swipe-content expense" data-expense-id="${escapeHtml(e.id)}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${escapeHtml(e.title)}</b><span>${escapeHtml(dateText)}${escapeHtml(e.category)} · ${escapeHtml(payer.name)} 先付 · ${e.participants.length}人参与${escapeHtml(rateText)}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${escapeHtml(symbols[e.currency] || "")}${finiteNumber(e.amount).toLocaleString()} ${escapeHtml(e.currency)}</span></div></div>
+      <button class="delete-action" type="button" data-delete-expense="${escapeHtml(e.id)}">删除</button>
+    </article>`;
   }).join("") : `<p class="empty">还没有记录，点下方“记一笔”。</p>`;
+  setupSwipeRows("#list");
   document.querySelectorAll("[data-expense-id]").forEach((row) => {
-    row.onclick = () => openExpenseSheet(row.dataset.expenseId);
+    row.onclick = (event) => {
+      const swipeRow = row.closest(".swipe-row");
+      if (swipeRow?.classList.contains("open") || swipeRow?.dataset.suppressClick === "1") {
+        swipeRow.classList.remove("open");
+        event.preventDefault();
+        return;
+      }
+      openExpenseSheet(row.dataset.expenseId);
+    };
+  });
+  document.querySelectorAll("[data-delete-expense]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      deleteExpense(button.dataset.deleteExpense);
+    };
   });
   const balances = calc(trip);
   const transfers = settle(trip, balances);
-  $("#balances").innerHTML = trip.people.map((p) => `<div class="balance">${avatar(p)}<div><b>${p.name}</b><small>${balances[p.id] >= 0 ? "应收" : "应付"}</small></div><strong class="${balances[p.id] >= 0 ? "receive" : "pay"}">${balances[p.id] >= 0 ? "+" : "−"}${money(balances[p.id])}</strong></div>`).join("");
+  $("#balances").innerHTML = trip.people.map((p) => `<div class="balance">${avatar(p)}<div><b>${escapeHtml(p.name)}</b><small>${balances[p.id] >= 0 ? "应收" : "应付"}</small></div><strong class="${balances[p.id] >= 0 ? "receive" : "pay"}">${balances[p.id] >= 0 ? "+" : "−"}${money(balances[p.id])}</strong></div>`).join("");
   $("#settleCount").textContent = `${transfers.length} 笔即可结清`;
-  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
-  $("#share").onclick = () => shareSettlement(trip, transfers);
+  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${escapeHtml(person(trip, x.from).name)} 支付给 ${escapeHtml(person(trip, x.to).name)}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
+  $("#share").onclick = async () => {
+    const text = settlementShareText(trip, transfers);
+    try {
+      const file = settlementShareFile(trip, transfers);
+      const shareData = { files: [file] };
+      if (navigator.share && navigator.canShare?.(shareData)) {
+        // 只传图片文件，避免微信 iOS 分享扩展拒绝“图片 + 文字”混合类型。
+        await navigator.share(shareData);
+        return;
+      }
+      await copySettlementText(text);
+      showToast("结算方案已复制，请粘贴到微信");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      try {
+        await copySettlementText(text);
+        showToast("图片分享不可用，结算方案已复制");
+      } catch (_) {
+        showToast("分享未完成，请稍后再试");
+      }
+    }
+  };
   renderStats(trip);
+}
+
+function closeSwipeRows(except = null) {
+  document.querySelectorAll(".swipe-row.open").forEach((row) => {
+    if (row !== except) row.classList.remove("open");
+  });
+}
+
+function setupSwipeRows(scope) {
+  document.querySelectorAll(`${scope} .swipe-row`).forEach((row) => {
+    if (row.dataset.swipeBound === "1") return;
+    row.dataset.swipeBound = "1";
+    const content = row.querySelector(".swipe-content");
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let dragging = false;
+    let horizontal = false;
+    row.addEventListener("touchstart", (event) => {
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      currentX = row.classList.contains("open") ? -82 : 0;
+      dragging = true;
+      horizontal = false;
+      row.dataset.suppressClick = "0";
+      row.classList.add("dragging");
+      closeSwipeRows(row);
+    }, { passive: true });
+    row.addEventListener("touchmove", (event) => {
+      if (!dragging) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (!horizontal && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy) * 1.15) horizontal = true;
+      if (!horizontal) return;
+      event.preventDefault();
+      currentX = Math.max(-82, Math.min(0, dx + (row.classList.contains("open") ? -82 : 0)));
+      if (content) content.style.transform = `translateX(${currentX}px)`;
+    }, { passive: false });
+    row.addEventListener("touchend", () => {
+      if (!dragging) return;
+      row.classList.remove("dragging");
+      if (content) content.style.transform = "";
+      if (horizontal) {
+        row.dataset.suppressClick = "1";
+        if (currentX < -22) {
+          closeSwipeRows(row);
+          row.classList.add("open");
+        } else {
+          row.classList.remove("open");
+        }
+      }
+      dragging = false;
+      horizontal = false;
+      setTimeout(() => row.dataset.suppressClick = "0", 320);
+    }, { passive: true });
+    row.addEventListener("click", (event) => {
+      if (row.classList.contains("open") && !event.target.closest(".delete-action")) {
+        row.classList.remove("open");
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+  });
+}
+
+function showToast(message) {
+  document.querySelector(".app-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "app-toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2200);
+}
+
+function deleteTrip(id) {
+  const trip = trips.find((t) => t.id === id);
+  if (!trip) return;
+  showConfirm({
+    title: "请您确认是否删除",
+    message: `删除旅行「${trip.name}」？里面的账单也会一起删除。`,
+    onConfirm: () => {
+      trips = trips.filter((t) => t.id !== id);
+      if (activeTripId === id) activeTripId = trips[0]?.id || "";
+      saveTrips();
+      renderHome();
+    }
+  });
+}
+
+function deleteExpense(id) {
+  const trip = activeTrip();
+  const expense = trip?.expenses.find((e) => e.id === id);
+  if (!trip || !expense) return;
+  showConfirm({
+    title: "请您确认是否删除",
+    message: `删除这条账单「${expense.title}」？`,
+    onConfirm: () => {
+      trip.expenses = trip.expenses.filter((e) => e.id === id ? false : true);
+      saveTrips();
+      renderDetail();
+    }
+  });
 }
 
 function usedForeignCurrencies(trip) {
@@ -346,7 +537,7 @@ function renderRateTools(trip) {
 }
 
 function statsFor(trip, personId) {
-  const rows = trip.expenses.filter((e) => e.participants.includes(personId)).map((e) => ({ ...e, share: cnyAmount(e) / e.participants.length }));
+  const rows = trip.expenses.filter((e) => e.participants.includes(personId) && e.participants.length).map((e) => ({ ...e, share: cnyAmount(e) / e.participants.length }));
   const total = rows.reduce((s, e) => s + e.share, 0);
   const cats = {};
   rows.forEach((e) => {
@@ -360,9 +551,9 @@ function renderStats(trip) {
     const stat = statsFor(trip, p.id);
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
     return `<details class="stat-card">
-      <summary>${avatar(p)}<div><b>${p.name}</b><span>个人消费 ${money(stat.total)}</span></div><strong>明细</strong></summary>
-      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${cat}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
-      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${e.title}</b><small>${e.date ? `${e.date} · ` : ""}${e.category}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
+      <summary>${avatar(p)}<div><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><strong class="stat-total">${money(stat.total)}</strong></summary>
+      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
+      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
     </details>`;
   }).join("");
 }
@@ -384,7 +575,10 @@ function openTripSheet(id = null) {
   $("#tripPeopleCount").value = trip?.peopleCount || trip?.people.length || "";
   $("#tripNicknames").value = trip?.people.map((p) => p.name).join(", ") || "";
   syncAvatarDrafts();
+  updateTripSaveState();
+  clearErrors();
   $("#tripSheet").showModal();
+  $("#tripSheet").scrollTop = 0;
 }
 
 function splitNames(raw) {
@@ -408,7 +602,11 @@ function syncAvatarDrafts() {
   const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
   const total = Math.max(0, count || names.length);
   for (let i = 0; i < total; i++) {
-    if (!draftAvatarMap[i]) draftAvatarMap[i] = currentTrip?.people?.[i]?.avatarIndex || (i % avatarCount) + 1;
+    if (!draftAvatarMap[i]) {
+      const preferred = currentTrip?.people?.[i]?.avatarIndex || (i % avatarCount) + 1;
+      const used = new Set(Object.entries(draftAvatarMap).filter(([key]) => Number(key) !== i).map(([, value]) => value));
+      draftAvatarMap[i] = used.has(preferred) ? firstUnusedAvatar(used) : preferred;
+    }
   }
   renderAvatarChooser(total, names);
 }
@@ -422,21 +620,41 @@ function renderAvatarChooser(count, names = splitNames($("#tripNicknames").value
     const name = names[i] || `朋友${i + 1}`;
     const idx = draftAvatarMap[i] || (i % avatarCount) + 1;
     const src = window.CAT_AVATARS?.[idx - 1] || `${avatarBase}/cat-${String(idx).padStart(2, "0")}.png`;
-    return `<button type="button" data-avatar-person="${i}"><img alt="${name}" src="${src}"><span>${name}</span></button>`;
+    return `<button type="button" data-avatar-person="${i}"><img alt="${escapeHtml(name)}" src="${escapeHtml(src)}"><span>${escapeHtml(name)}</span></button>`;
   }).join("")}</div>`;
+}
+
+function firstUnusedAvatar(used, after = 0) {
+  for (let offset = 1; offset <= avatarCount; offset++) {
+    const candidate = ((after + offset - 1) % avatarCount) + 1;
+    if (!used.has(candidate)) return candidate;
+  }
+  return ((after || 1) % avatarCount) + 1;
+}
+
+function updateTripSaveState() {
+  const name = $("#tripName").value.trim();
+  const peopleCount = Number($("#tripPeopleCount").value);
+  const names = splitNames($("#tripNicknames").value);
+  const disabled = !name || !Number.isInteger(peopleCount) || peopleCount < 1 || names.length !== peopleCount;
+  $("#saveTrip").classList.toggle("soft-disabled", disabled);
+  $("#saveTripTop").classList.toggle("soft-disabled", disabled);
+  $("#saveTrip").setAttribute("aria-disabled", String(disabled));
+  $("#saveTripTop").setAttribute("aria-disabled", String(disabled));
 }
 
 function saveTrip() {
   clearErrors();
   const name = $("#tripName").value.trim();
   const peopleCount = Number($("#tripPeopleCount").value);
-  const nicknames = $("#tripNicknames").value.trim();
-  const firstInvalid = !name ? $("#tripName") : !peopleCount || peopleCount < 1 ? $("#tripPeopleCount") : !nicknames ? $("#tripNicknames") : null;
+  const names = splitNames($("#tripNicknames").value);
+  const firstInvalid = !name ? $("#tripName") : !Number.isInteger(peopleCount) || peopleCount < 1 ? $("#tripPeopleCount") : names.length !== peopleCount ? $("#tripNicknames") : null;
   if (firstInvalid) return focusInvalid(firstInvalid);
   const currentTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null;
   const people = parsePeople($("#tripNicknames").value, peopleCount, currentTrip?.people || []);
   if (editingTripId) {
     Object.assign(currentTrip, { name, destination: "", startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people });
+    migrateTrip(currentTrip);
   } else {
     const trip = { id: crypto.randomUUID(), name, destination: "", startDate: $("#tripStart").value, endDate: $("#tripEnd").value, peopleCount, people, expenses: [] };
     trips.unshift(trip);
@@ -507,7 +725,7 @@ function setParticipantModeFromSelection(trip, expense) {
 
 function resetExpenseForm(expense = null) {
   const trip = activeTrip();
-  $("#payer").innerHTML = trip.people.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+  $("#payer").innerHTML = trip.people.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
   $("#category").innerHTML = typeOptions.map(([name, icon]) => `<option value="${name}">${icon} ${name}</option>`).join("");
   editingExpenseId = expense?.id || null;
   selected = expense ? [...expense.participants] : trip.people.map((p) => p.id);
@@ -518,11 +736,14 @@ function resetExpenseForm(expense = null) {
   $("#expenseDate").value = expense?.date || today();
   $("#currency").value = expense?.currency || "CNY";
   $("#category").value = expense?.category || $("#category").value;
+  $("#category").dataset.previousCategory = $("#category").value;
   $("#payer").value = expense?.payer || $("#payer").value;
   $("#rateInput").value = expense?.rate || rates[$("#currency").value] || 1;
   updateConversion();
   updateRateField();
   renderPeoplePick();
+  clearErrors();
+  $("#sheetTitle").textContent = expense ? "编辑账单" : "记一笔";
 }
 
 function openExpenseSheet(id = null) {
@@ -530,6 +751,7 @@ function openExpenseSheet(id = null) {
   const expense = id ? trip.expenses.find((e) => e.id === id) : null;
   resetExpenseForm(expense);
   $("#sheet").showModal();
+  $("#sheet").scrollTop = 0;
 }
 
 function renderPeoplePick() {
@@ -548,7 +770,7 @@ function renderPeoplePick() {
   $("#peoplePick").innerHTML = `<button type="button" data-all class="${isAll ? "on" : ""}" ${isBorrow ? "disabled" : ""}>全部</button>` + trip.people.map((p) => {
     const disabled = isBorrow && p.id === payerId;
     const isOn = participantMode === "partial" && selected.includes(p.id);
-    return `<button type="button" data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
+    return `<button type="button" data-id="${escapeHtml(p.id)}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${escapeHtml(p.name)}</button>`;
   }).join("");
   updateExpenseSaveState();
 }
@@ -603,6 +825,41 @@ function saveExpense() {
   renderDetail();
 }
 
+function showConfirm({ title, message, onConfirm }) {
+  document.querySelector(".app-confirm-mask")?.remove();
+  const mask = document.createElement("div");
+  mask.className = "app-confirm-mask";
+  mask.innerHTML = `
+    <div class="app-confirm" role="dialog" aria-modal="true">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(message)}</p>
+      <div class="app-confirm-actions">
+        <button type="button" class="app-confirm-cancel">取消</button>
+        <button type="button" class="app-confirm-delete">确认删除</button>
+      </div>
+    </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.addEventListener("click", (event) => {
+    if (event.target === mask) close();
+  });
+  mask.querySelector(".app-confirm-cancel").onclick = close;
+  mask.querySelector(".app-confirm-delete").onclick = () => {
+    close();
+    onConfirm?.();
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[ch]));
+}
+
 function clearErrors() {
   document.querySelectorAll(".invalid").forEach((el) => el.classList.remove("invalid"));
 }
@@ -629,6 +886,8 @@ function updateExpenseSaveState() {
   const disabled = invalidAmount || invalidRate || !title || !$("#category").value || !$("#payer").value || !hasPeople;
   $("#save").classList.toggle("soft-disabled", disabled);
   $("#saveTop").classList.toggle("soft-disabled", disabled);
+  $("#save").setAttribute("aria-disabled", String(disabled));
+  $("#saveTop").setAttribute("aria-disabled", String(disabled));
 }
 
 function updateConversion() {
@@ -655,7 +914,7 @@ function openRateSheet() {
   $("#rateList").innerHTML = currencies.length ? currencies.map((currency) => {
     const history = rateHistory(trip, currency);
     const latest = history[history.length - 1] || rates[currency] || 1;
-    return `<label>${currency} 兑人民币汇率 <span class="req">*</span><input data-rate-currency="${currency}" type="number" inputmode="decimal" min="0" step="0.0001" value="${latest}"><small>历史录入：${history.join("，")}</small></label>`;
+    return `<label>${escapeHtml(currency)} 兑人民币汇率 <span class="req">*</span><input data-rate-currency="${escapeHtml(currency)}" type="number" inputmode="decimal" min="0" step="0.0001" value="${escapeHtml(latest)}"><small>历史录入：${escapeHtml(history.join("，"))}</small></label>`;
   }).join("") : `<p class="empty">本旅行还没有外币账单。</p>`;
   $("#rateSheet").showModal();
 }
@@ -682,32 +941,31 @@ function initPromoCarousel() {
   const track = $("#promoTrack");
   const dots = $("#promoDots");
   if (!track || !dots) return;
-  const slides = [...track.querySelectorAll(".promo-slide")];
+  const slides = [...track.children];
+  if (!slides.length) return;
   let active = 0;
+  let timer = null;
   let scrollFrame = 0;
-  let timer = 0;
-
-  const paintDots = () => {
-    [...dots.children].forEach((dot, index) => {
-      dot.classList.toggle("on", index === active);
-      dot.setAttribute("aria-current", index === active ? "true" : "false");
-    });
-  };
+  dots.innerHTML = slides.map((_, index) => `<button type="button" aria-label="查看第 ${index + 1} 个亮点"></button>`).join("");
+  const dotButtons = [...dots.children];
+  const paintDots = () => dotButtons.forEach((dot, index) => dot.classList.toggle("active", index === active));
   const go = (index, behavior = "smooth") => {
     active = (index + slides.length) % slides.length;
     track.scrollTo({ left: active * track.clientWidth, behavior });
     paintDots();
   };
+  const stop = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
   const start = () => {
-    clearInterval(timer);
+    stop();
     timer = setInterval(() => go(active + 1), 4800);
   };
-
-  dots.innerHTML = slides.map((_, index) => `<button type="button" aria-label="查看第 ${index + 1} 个亮点"></button>`).join("");
   dots.onclick = (event) => {
     const dot = event.target.closest("button");
     if (!dot) return;
-    go([...dots.children].indexOf(dot));
+    go(dotButtons.indexOf(dot));
     start();
   };
   track.addEventListener("scroll", () => {
@@ -720,13 +978,51 @@ function initPromoCarousel() {
       }
     });
   }, { passive: true });
-  track.addEventListener("pointerdown", () => clearInterval(timer), { passive: true });
-  track.addEventListener("pointerup", start, { passive: true });
-  track.addEventListener("pointercancel", start, { passive: true });
-  document.addEventListener("visibilitychange", () => document.hidden ? clearInterval(timer) : start());
+  track.addEventListener("touchstart", stop, { passive: true });
+  track.addEventListener("touchend", start, { passive: true });
+  document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
   window.addEventListener("resize", () => go(active, "auto"));
   paintDots();
   start();
+}
+
+function initDetailSwipeBack() {
+  const detail = $("#tripDetail");
+  if (!detail) return;
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+  let horizontal = false;
+  detail.addEventListener("touchstart", (event) => {
+    if (detail.classList.contains("hidden") || document.querySelector("dialog[open]")) return;
+    // 账单卡片同时支持左滑删除和右滑返回：方向相反，不需要互相禁用。
+    if (event.target.closest("button,input,select,textarea,nav,a")) return;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    tracking = true;
+    horizontal = false;
+  }, { passive: true });
+  detail.addEventListener("touchmove", (event) => {
+    if (!tracking) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (!horizontal && dx > 12 && Math.abs(dx) > Math.abs(dy) * 1.35) horizontal = true;
+    if (horizontal && dx > 0) event.preventDefault();
+  }, { passive: false });
+  detail.addEventListener("touchend", (event) => {
+    if (!tracking) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    tracking = false;
+    if (horizontal && dx > 88 && Math.abs(dx) > Math.abs(dy) * 1.35) showHome();
+  }, { passive: true });
+  detail.addEventListener("touchcancel", () => {
+    tracking = false;
+    horizontal = false;
+  }, { passive: true });
 }
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -744,13 +1040,26 @@ $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
-$("#tripPeopleCount").oninput = syncAvatarDrafts;
-$("#tripNicknames").oninput = syncAvatarDrafts;
+$("#tripName").oninput = () => {
+  $("#tripName").classList.remove("invalid");
+  updateTripSaveState();
+};
+$("#tripPeopleCount").oninput = () => {
+  $("#tripPeopleCount").classList.remove("invalid");
+  syncAvatarDrafts();
+  updateTripSaveState();
+};
+$("#tripNicknames").oninput = () => {
+  $("#tripNicknames").classList.remove("invalid");
+  syncAvatarDrafts();
+  updateTripSaveState();
+};
 $("#avatarChooser").onclick = (event) => {
   const button = event.target.closest("[data-avatar-person]");
   if (!button) return;
   const i = Number(button.dataset.avatarPerson);
-  draftAvatarMap[i] = ((draftAvatarMap[i] || i + 1) % avatarCount) + 1;
+  const used = new Set(Object.entries(draftAvatarMap).filter(([key]) => Number(key) !== i).map(([, value]) => value));
+  draftAvatarMap[i] = firstUnusedAvatar(used, draftAvatarMap[i] || i + 1);
   syncAvatarDrafts();
 };
 $("#calendarMonth").onclick = (event) => {
@@ -770,7 +1079,15 @@ $("[data-rate-close]").onclick = () => $("#rateSheet").close();
 $("#saveRates").onclick = $("#saveRatesTop").onclick = saveRateBatch;
 $("#save").onclick = $("#saveTop").onclick = saveExpense;
 $("#category").onchange = () => {
-  if ($("#category").value === "借用") selected = [];
+  const previous = $("#category").dataset.previousCategory;
+  if ($("#category").value === "借用") {
+    participantMode = "partial";
+    selected = [];
+  } else if (previous === "借用") {
+    participantMode = "all";
+    selected = activeTrip().people.map((p) => p.id);
+  }
+  $("#category").dataset.previousCategory = $("#category").value;
   renderPeoplePick();
   updateExpenseSaveState();
 };
@@ -791,18 +1108,16 @@ $("#rateInput").oninput = () => {
   updateConversion();
   updateExpenseSaveState();
 };
-$("#peoplePick").addEventListener("pointerup", (event) => {
-  const button = event.target.closest("button");
-  if (button) toggleParticipant(button);
-});
 $("#peoplePick").addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (button) {
     event.preventDefault();
     event.stopPropagation();
+    toggleParticipant(button);
   }
 });
 saveTrips();
 initPromoCarousel();
+initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=26");
