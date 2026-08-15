@@ -1,6 +1,43 @@
 const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, EUR: 7.85 };
 const RatePolicy = window.HAOYOUJI_RATE_POLICY;
 const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", EUR: "€" };
+const APP_URL = "https://cassiopeiattt0926-prog.github.io/yiqizou-trip-split/";
+// 固定官网地址的二维码矩阵（M 级纠错）。内置后生成分享图不依赖网络或第三方二维码服务。
+const APP_QR = [
+  "111111101110010010010001001111111",
+  "100000101101010011001001101000001",
+  "101110100001000100011000001011101",
+  "101110101010001001101011101011101",
+  "101110100010001001010110101011101",
+  "100000100010001000011100101000001",
+  "111111101010101010101010101111111",
+  "000000001111100111001011000000000",
+  "101101110110000111001100001001011",
+  "110100010000000011011011001101111",
+  "010110111101101001101101100111011",
+  "110011010011011110111011000101000",
+  "111101110010100101000010010111001",
+  "101101000011010100110000100100010",
+  "111111111000001010010010101000000",
+  "010010000000010110010100111011100",
+  "011000100111011010000110111011100",
+  "101001011010000100101111111011011",
+  "100000111001100101100010011110110",
+  "101110000000100001100010010010010",
+  "011110111110110001111100010001100",
+  "101011011100011010011111001100001",
+  "000100111000100010001011101011011",
+  "010011011111111010011000001011010",
+  "100001111010110011101011111111011",
+  "000000001110010111110000100011000",
+  "111111101100001000011001101010000",
+  "100000101101110110100111100011101",
+  "101110100001000100100101111110110",
+  "101110101101100100001111000101001",
+  "101110101101011101001100101101100",
+  "100000100000101011000010110110001",
+  "111111101110100111000101001010100"
+];
 const typeOptions = [
   ["酒店", "🛏️"],
   ["机票", "✈️"],
@@ -252,10 +289,57 @@ function fitCanvasText(ctx, text, maxWidth) {
   return `${value}…`;
 }
 
+function drawQrCode(ctx, x, y, size) {
+  const quiet = 4;
+  const modules = APP_QR.length + quiet * 2;
+  const cell = Math.floor(size / modules);
+  const actual = cell * modules;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x, y, actual, actual);
+  ctx.fillStyle = "#073f30";
+  APP_QR.forEach((row, rowIndex) => {
+    [...row].forEach((value, colIndex) => {
+      if (value === "1") ctx.fillRect(x + (colIndex + quiet) * cell, y + (rowIndex + quiet) * cell, cell, cell);
+    });
+  });
+  return actual;
+}
+
+function drawQrFooter(ctx, width, top) {
+  ctx.fillStyle = "#ffffff";
+  roundedRect(ctx, 60, top, width - 120, 250, 32);
+  ctx.fill();
+  ctx.strokeStyle = "#e1e5dc";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  const qrSize = drawQrCode(ctx, 88, top + 27, 196);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#073f30";
+  ctx.font = '700 34px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("扫描二维码，开始使用好友记", 330, top + 88);
+  ctx.fillStyle = "#718078";
+  ctx.font = '24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("好友一起出游，记账分摊更省心", 330, top + 135);
+  ctx.font = '20px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText(APP_URL, 330, top + 183);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#98a49d";
+  ctx.font = '20px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("扫码使用", 88 + qrSize / 2, top + 231);
+}
+
+function canvasFile(canvas, name) {
+  const dataUrl = canvas.toDataURL("image/png");
+  const binary = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], name, { type: "image/png" });
+}
+
 function settlementShareFile(trip, transfers) {
   const width = 1080;
   const rowCount = Math.max(transfers.length, 1);
-  const height = 650 + rowCount * 150;
+  const height = 980 + rowCount * 150;
   const total = trip.expenses.reduce((sum, expense) => sum + cnyAmount(expense), 0);
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -324,17 +408,117 @@ function settlementShareFile(trip, transfers) {
     ctx.fillText(money(transfer.n), 980, y + 72);
   });
 
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#98a49d";
-  ctx.font = '24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("由好友记生成 · 游玩算账更轻易", width / 2, height - 40);
-
-  const dataUrl = canvas.toDataURL("image/png");
-  const binary = atob(dataUrl.split(",")[1]);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  drawQrFooter(ctx, width, height - 290);
   const safeName = tripName.replace(/[\\/:*?"<>|]/g, "-").slice(0, 30) || "旅行";
-  return new File([bytes], `好友记-${safeName}-结算单.png`, { type: "image/png" });
+  return canvasFile(canvas, `好友记-${safeName}-结算单.png`);
+}
+
+function personalShareText(trip, p, stat) {
+  const categories = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
+  const categoryLines = categories.map(([category, amount]) => `${category} ${money(amount)}（${stat.total ? Math.round(amount / stat.total * 100) : 0}%）`);
+  const detailLines = stat.rows.map((expense) => `${expense.date || "日期未填"} ${expense.title} ${money(expense.share)}`);
+  return [
+    "好友记 · 个人消费清单",
+    `${trip.name} · ${p.name}`,
+    `个人消费金额总计 ${money(stat.total)}`,
+    ...categoryLines,
+    ...detailLines,
+    APP_URL
+  ].join("\n");
+}
+
+function personalShareFile(trip, p, stat) {
+  const width = 1080;
+  const categories = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
+  const shownRows = stat.rows.slice(0, 18);
+  const categoryCount = Math.max(categories.length, 1);
+  const detailCount = Math.max(shownRows.length, 1);
+  const height = 980 + categoryCount * 82 + detailCount * 96;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
+  ctx.fillStyle = "#f7f8f3";
+  ctx.fillRect(0, 0, width, height);
+  drawShareLogo(ctx, 70, 54, 1.35);
+  ctx.fillStyle = "#073f30";
+  ctx.font = '700 54px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("好友记", 225, 112);
+  ctx.fillStyle = "#718078";
+  ctx.font = '28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("好友记 好游记 游玩算账更轻易", 225, 158);
+
+  ctx.fillStyle = "#174f3a";
+  roundedRect(ctx, 60, 205, 960, 230, 42);
+  ctx.fill();
+  ctx.fillStyle = "#c7dfd2";
+  ctx.font = '30px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("个人消费清单", 110, 270);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '700 52px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText(fitCanvasText(ctx, `${p.name} · ${trip.name}`, 610), 110, 345);
+  ctx.textAlign = "right";
+  ctx.font = "56px Georgia, serif";
+  ctx.fillText(money(stat.total), 970, 345);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#c7dfd2";
+  ctx.font = '26px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText(`${dateRange(trip)} · 按实际分摊`, 110, 397);
+
+  let y = 515;
+  ctx.fillStyle = "#17211d";
+  ctx.font = '700 40px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("分类消费", 70, y);
+  y += 36;
+  if (!categories.length) categories.push(["暂无消费", 0]);
+  categories.forEach(([category, amount]) => {
+    ctx.fillStyle = "#ffffff";
+    roundedRect(ctx, 60, y, 960, 66, 20);
+    ctx.fill();
+    ctx.fillStyle = "#17211d";
+    ctx.font = '28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(`${icons[category] || "✦"} ${category}`, 95, y + 43);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#174f3a";
+    ctx.fillText(`${money(amount)}  ·  ${stat.total ? Math.round(amount / stat.total * 100) : 0}%`, 980, y + 43);
+    ctx.textAlign = "left";
+    y += 82;
+  });
+
+  y += 42;
+  ctx.fillStyle = "#17211d";
+  ctx.font = '700 40px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("消费明细", 70, y);
+  y += 28;
+  const detailRows = shownRows.length ? shownRows : [{ title: "暂无消费", category: "", date: "", share: 0 }];
+  detailRows.forEach((expense) => {
+    ctx.fillStyle = "#ffffff";
+    roundedRect(ctx, 60, y, 960, 80, 20);
+    ctx.fill();
+    ctx.fillStyle = "#17211d";
+    ctx.font = '700 27px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(fitCanvasText(ctx, expense.title, 560), 95, y + 35);
+    ctx.fillStyle = "#718078";
+    ctx.font = '21px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(`${expense.date || "日期未填"}${expense.category ? ` · ${expense.category}` : ""}`, 95, y + 64);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#174f3a";
+    ctx.font = '700 28px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(money(expense.share), 980, y + 50);
+    ctx.textAlign = "left";
+    y += 96;
+  });
+  if (stat.rows.length > shownRows.length) {
+    ctx.fillStyle = "#718078";
+    ctx.font = '22px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.fillText(`另有 ${stat.rows.length - shownRows.length} 笔明细，请在好友记中查看`, 80, y + 10);
+  }
+  drawQrFooter(ctx, width, height - 290);
+  const safeTrip = String(trip.name || "旅行").replace(/[\\/:*?"<>|]/g, "-").slice(0, 24);
+  const safePerson = String(p.name || "朋友").replace(/[\\/:*?"<>|]/g, "-").slice(0, 16);
+  return canvasFile(canvas, `好友记-${safeTrip}-${safePerson}-个人消费清单.png`);
 }
 
 async function copySettlementText(text) {
@@ -352,6 +536,27 @@ async function copySettlementText(text) {
   const copied = document.execCommand?.("copy");
   textarea.remove();
   if (!copied) throw new Error("Clipboard unavailable");
+}
+
+async function shareGeneratedImage(file, fallbackText, copiedMessage) {
+  try {
+    const shareData = { files: [file] };
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      // 只传图片文件，避免微信 iOS 分享扩展拒绝“图片 + 文字”混合类型。
+      await navigator.share(shareData);
+      return;
+    }
+    await copySettlementText(fallbackText);
+    showToast(copiedMessage);
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    try {
+      await copySettlementText(fallbackText);
+      showToast("图片分享不可用，清单文字已复制");
+    } catch (_) {
+      showToast("分享未完成，请稍后再试");
+    }
+  }
 }
 
 function renderDetail() {
@@ -400,25 +605,7 @@ function renderDetail() {
   $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${escapeHtml(person(trip, x.from).name)} 支付给 ${escapeHtml(person(trip, x.to).name)}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
   $("#share").onclick = async () => {
     const text = settlementShareText(trip, transfers);
-    try {
-      const file = settlementShareFile(trip, transfers);
-      const shareData = { files: [file] };
-      if (navigator.share && navigator.canShare?.(shareData)) {
-        // 只传图片文件，避免微信 iOS 分享扩展拒绝“图片 + 文字”混合类型。
-        await navigator.share(shareData);
-        return;
-      }
-      await copySettlementText(text);
-      showToast("结算方案已复制，请粘贴到微信");
-    } catch (error) {
-      if (error?.name === "AbortError") return;
-      try {
-        await copySettlementText(text);
-        showToast("图片分享不可用，结算方案已复制");
-      } catch (_) {
-        showToast("分享未完成，请稍后再试");
-      }
-    }
+    await shareGeneratedImage(settlementShareFile(trip, transfers), text, "结算方案已复制，请粘贴到微信");
   };
   renderStats(trip);
 }
@@ -480,6 +667,79 @@ function setupSwipeRows(scope) {
     }, { passive: true });
     row.addEventListener("click", (event) => {
       if (row.classList.contains("open") && !event.target.closest(".delete-action")) {
+        row.classList.remove("open");
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+  });
+}
+
+function closeStatShareSwipeRows(except = null) {
+  document.querySelectorAll(".stat-swipe-row.open").forEach((row) => {
+    if (row !== except) row.classList.remove("open");
+  });
+}
+
+function setupStatShareSwipeRows() {
+  document.querySelectorAll("#statsList .stat-swipe-row").forEach((row) => {
+    if (row.dataset.statSwipeBound === "1") return;
+    row.dataset.statSwipeBound = "1";
+    const content = row.querySelector(".stat-swipe-content");
+    const details = row.querySelector("details");
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let dragging = false;
+    let horizontal = false;
+    row.addEventListener("touchstart", (event) => {
+      if (details?.open || event.target.closest("button")) return;
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      currentX = row.classList.contains("open") ? -104 : 0;
+      dragging = true;
+      horizontal = false;
+      row.dataset.suppressClick = "0";
+      row.classList.add("dragging");
+      closeStatShareSwipeRows(row);
+    }, { passive: true });
+    row.addEventListener("touchmove", (event) => {
+      if (!dragging) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (!horizontal && Math.abs(dx) > 5 && Math.abs(dx) > Math.abs(dy) * 1.1) horizontal = true;
+      if (!horizontal) return;
+      event.preventDefault();
+      currentX = Math.max(-104, Math.min(0, dx + (row.classList.contains("open") ? -104 : 0)));
+      if (content) content.style.transform = `translateX(${currentX}px)`;
+    }, { passive: false });
+    row.addEventListener("touchend", () => {
+      if (!dragging) return;
+      row.classList.remove("dragging");
+      if (content) content.style.transform = "";
+      if (horizontal) {
+        row.dataset.suppressClick = "1";
+        if (currentX < -18) {
+          closeStatShareSwipeRows(row);
+          row.classList.add("open");
+        } else {
+          row.classList.remove("open");
+        }
+      }
+      dragging = false;
+      horizontal = false;
+      setTimeout(() => row.dataset.suppressClick = "0", 320);
+    }, { passive: true });
+    row.addEventListener("touchcancel", () => {
+      dragging = false;
+      horizontal = false;
+      row.classList.remove("dragging");
+      if (content) content.style.transform = "";
+    }, { passive: true });
+    row.addEventListener("click", (event) => {
+      if (row.classList.contains("open") && !event.target.closest(".stat-share-action")) {
         row.classList.remove("open");
         event.preventDefault();
         event.stopPropagation();
@@ -565,12 +825,37 @@ function renderStats(trip) {
   $("#statsList").innerHTML = trip.people.map((p) => {
     const stat = statsFor(trip, p.id);
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
-    return `<details class="stat-card">
-      <summary>${avatar(p)}<div><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><strong class="stat-total">${money(stat.total)}</strong></summary>
-      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
-      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
-    </details>`;
+    return `<article class="stat-swipe-row" data-stat-person="${escapeHtml(p.id)}">
+      <details class="stat-card stat-swipe-content">
+        <summary>${avatar(p)}<div class="stat-person"><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><div class="stat-summary-end"><strong class="stat-total">${money(stat.total)}</strong><span class="stat-toggle"><span data-stat-toggle-text>查看明细</span><i aria-hidden="true">⌄</i></span></div></summary>
+        <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
+        <div class="mini-list">${stat.rows.length ? stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("") : `<p class="empty">暂无消费明细</p>`}</div>
+        <button class="wide personal-share" type="button" data-personal-share="${escapeHtml(p.id)}">生成${escapeHtml(p.name)}的个人消费清单</button>
+      </details>
+      <button class="stat-share-action" type="button" data-personal-swipe-share="${escapeHtml(p.id)}">生成清单</button>
+    </article>`;
   }).join("");
+  setupStatShareSwipeRows();
+  document.querySelectorAll("#statsList details.stat-card").forEach((details) => {
+    const update = () => {
+      details.closest(".stat-swipe-row")?.classList.remove("open");
+      const text = details.querySelector("[data-stat-toggle-text]");
+      if (text) text.textContent = details.open ? "收起" : "查看明细";
+    };
+    details.addEventListener("toggle", update);
+    update();
+  });
+  document.querySelectorAll("[data-personal-share],[data-personal-swipe-share]").forEach((button) => {
+    button.onclick = async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const personId = button.dataset.personalShare || button.dataset.personalSwipeShare;
+      const p = person(trip, personId);
+      const stat = statsFor(trip, personId);
+      button.closest(".stat-swipe-row")?.classList.remove("open");
+      await shareGeneratedImage(personalShareFile(trip, p, stat), personalShareText(trip, p, stat), `${p.name}的消费清单已复制`);
+    };
+  });
 }
 
 function openTripSheet(id = null) {
@@ -594,6 +879,7 @@ function openTripSheet(id = null) {
   clearErrors();
   $("#tripSheet").showModal();
   $("#tripSheet").scrollTop = 0;
+  if (!trip) focusForTyping($("#tripName"));
 }
 
 function splitNames(raw) {
@@ -768,6 +1054,7 @@ function openExpenseSheet(id = null) {
   resetExpenseForm(expense);
   $("#sheet").showModal();
   $("#sheet").scrollTop = 0;
+  if (!expense) focusForTyping($("#amount"));
 }
 
 function renderPeoplePick() {
@@ -893,6 +1180,36 @@ function focusInvalid(el) {
     if (el.matches("input,select")) el.focus();
     else el.querySelector("button:not(:disabled)")?.focus();
   }, 250);
+}
+
+function focusForTyping(el) {
+  if (!el) return;
+  const focus = () => {
+    try {
+      el.focus({ preventScroll: true });
+      if (typeof el.setSelectionRange === "function") {
+        const end = String(el.value || "").length;
+        el.setSelectionRange(end, end);
+      }
+    } catch (_) {
+      el.focus();
+    }
+  };
+  focus();
+  requestAnimationFrame(() => {
+    focus();
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+function focusNextTripInput(current) {
+  const fields = [$("#tripName"), $("#tripPeopleCount"), $("#tripNicknames")];
+  const index = fields.indexOf(current);
+  const after = fields.slice(index + 1).find((field) => !field.value.trim());
+  const remaining = fields.find((field) => field !== current && !field.value.trim());
+  const next = after || remaining;
+  if (next) focusForTyping(next);
+  else $("#saveTrip").focus();
 }
 
 function updateExpenseSaveState() {
@@ -1077,6 +1394,13 @@ $("#tripNicknames").oninput = () => {
   syncAvatarDrafts();
   updateTripSaveState();
 };
+[$("#tripName"), $("#tripPeopleCount"), $("#tripNicknames")].forEach((field) => {
+  field.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    focusNextTripInput(field);
+  });
+});
 $("#avatarChooser").onclick = (event) => {
   const button = event.target.closest("[data-avatar-person]");
   if (!button) return;
@@ -1143,4 +1467,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=27");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=28");

@@ -9,10 +9,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="好友记">
   <title>好友记</title>
-  <link rel="manifest" href="manifest.webmanifest?v=27">
+  <link rel="manifest" href="manifest.webmanifest?v=28">
   <link rel="icon" href="assets/brand/app-icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/brand/app-icon-180.png">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 <main>
@@ -64,9 +64,9 @@
     <section id="settle" class="content hidden">
       <div class="section-head"><h2>最少转账方案</h2><span id="settleCount"></span></div>
       <div id="transfers" class="transfers"></div>
+      <button id="share" class="wide">分享结算单</button>
       <div class="divider"><span>应收应付明细</span></div>
       <div id="balances"></div>
-      <button id="share" class="wide">分享结算单</button>
     </section>
     <section id="stats" class="content hidden">
       <div class="section-head"><h2>个人消费统计</h2><span>按实际分摊</span></div>
@@ -79,7 +79,7 @@
 <dialog id="tripSheet">
   <div class="grab"></div>
   <div class="sheet-head"><button data-trip-close>取消</button><h2 id="tripSheetTitle">新建旅行</h2><button id="saveTripTop">保存</button></div>
-  <label>旅行名称 <span class="req">*</span><input id="tripName" required placeholder="例如：东京朋友旅行"></label>
+  <label>旅行名称 <span class="req">*</span><input id="tripName" required enterkeyhint="next" placeholder="例如：东京朋友旅行"></label>
   <div class="date-group">
     <span>旅行日期 <em>选填</em></span>
     <button id="tripDateRangeButton" class="date-range-button" type="button">选择开始和结束日期</button>
@@ -92,8 +92,8 @@
     <input id="tripStart" type="hidden">
     <input id="tripEnd" type="hidden">
   </div>
-  <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
-  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt bb qq xw"></label>
+  <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" enterkeyhint="next" min="1" required placeholder="例如：4"></label>
+  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required enterkeyhint="done" placeholder="例如：tt bb qq xw"></label>
   <div id="avatarChooser" class="avatar-chooser"></div>
   <p class="hint small">昵称用空格或逗号分开，支持英文逗号和中文逗号，之后记账时直接点选。</p>
   <button id="saveTrip" class="wide">保存旅行项目</button>
@@ -122,8 +122,8 @@
   <div id="rateList" class="rate-list"></div>
   <button id="saveRates" class="wide">保存并重新计算</button>
 </dialog>
-<script src="avatars.js?v=27"></script>
-<script src="rate-policy.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="avatars.js?v=28"></script>
+<script src="rate-policy.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>
