@@ -18,14 +18,14 @@ const icons = Object.fromEntries(typeOptions);
 const palette = ["#ff704d", "#487bff", "#a06be8", "#16825b", "#d18a00", "#2b9aa0", "#d65c8f", "#6b7c59"];
 const legacyPeople = [
   { id: "tt", name: "TT", color: "#ff704d" },
-  { id: "qy", name: "QY", color: "#487bff" },
-  { id: "hy", name: "HY", color: "#a06be8" }
+  { id: "bb", name: "BB", color: "#487bff" },
+  { id: "qq", name: "QQ", color: "#a06be8" }
 ];
 const legacySeed = [
-  ["机场去酒店", "打车", 12870, "JPY", 0.049, "tt", ["tt", "qy", "hy"]],
-  ["鳗鱼饭", "餐饮", 13800, "JPY", 0.049, "qy", ["tt", "qy", "hy"]],
-  ["森美术馆", "门票", 4000, "JPY", 0.049, "tt", ["tt", "qy"]],
-  ["富士山咖啡", "餐饮", 3160, "JPY", 0.049, "hy", ["qy", "hy"]]
+  ["BB借钱给TT", "借用", 200, "CNY", 1, "bb", ["tt"]],
+  ["机场去酒店", "打车", 12870, "JPY", 0.049, "tt", ["tt", "bb", "qq"]],
+  ["鳗鱼饭", "餐饮", 13800, "JPY", 0.049, "bb", ["tt", "bb", "qq"]],
+  ["森美术馆", "门票", 4000, "JPY", 0.049, "tt", ["tt", "bb"]]
 ].map((x, i) => ({ id: String(i), title: x[0], category: x[1], amount: x[2], currency: x[3], rate: x[4], payer: x[5], participants: x[6] }));
 const $ = (s) => document.querySelector(s);
 const money = (n) => "¥" + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -39,6 +39,7 @@ let activeTripId = localStorage.getItem("yiqizou-active-trip") || trips[0]?.id;
 let selected = [];
 let participantMode = "all";
 let editingTripId = null;
+let editingExpenseId = null;
 
 function loadTrips() {
   const saved = JSON.parse(localStorage.getItem("yiqizou-trips") || "null");
@@ -147,13 +148,16 @@ function renderDetail() {
   $("#list").innerHTML = trip.expenses.length ? trip.expenses.map((e) => {
     const payer = person(trip, e.payer);
     const dateText = e.date ? `${e.date} · ` : "";
-    return `<article class="expense"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与</span></div><div class="amt"><b>${money(e.amount * e.rate)}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></article>`;
+    return `<article class="expense" data-expense-id="${e.id}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与</span></div><div class="amt"><b>${money(e.amount * e.rate)}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></article>`;
   }).join("") : `<p class="empty">还没有记录，点下方“记一笔”。</p>`;
+  document.querySelectorAll("[data-expense-id]").forEach((row) => {
+    row.onclick = () => openExpenseSheet(row.dataset.expenseId);
+  });
   const balances = calc(trip);
   const transfers = settle(trip, balances);
   $("#balances").innerHTML = trip.people.map((p) => `<div class="balance">${avatar(p)}<div><b>${p.name}</b><small>${balances[p.id] >= 0 ? "应收" : "应付"}</small></div><strong class="${balances[p.id] >= 0 ? "receive" : "pay"}">${balances[p.id] >= 0 ? "+" : "−"}${money(balances[p.id])}</strong></div>`).join("");
   $("#settleCount").textContent = `${transfers.length} 笔即可结清`;
-  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b><span>建议备注“${trip.name}”</span></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
+  $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
   $("#share").onclick = () => navigator.share?.({ title: `${trip.name}结算`, text: transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清" });
   renderStats(trip);
 }
@@ -221,18 +225,34 @@ function saveTrip() {
   showDetail();
 }
 
-function resetExpenseForm() {
+function setParticipantModeFromSelection(trip, expense) {
+  const sameAsAll = trip.people.length === expense.participants.length && trip.people.every((p) => expense.participants.includes(p.id)) && expense.category !== "借用";
+  participantMode = sameAsAll ? "all" : "partial";
+}
+
+function resetExpenseForm(expense = null) {
   const trip = activeTrip();
   $("#payer").innerHTML = trip.people.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
   $("#category").innerHTML = typeOptions.map(([name, icon]) => `<option value="${name}">${icon} ${name}</option>`).join("");
-  selected = trip.people.map((p) => p.id);
-  participantMode = "all";
-  $("#amount").value = "";
-  $("#item").value = "";
-  $("#expenseDate").value = today();
-  $("#currency").value = "CNY";
+  editingExpenseId = expense?.id || null;
+  selected = expense ? [...expense.participants] : trip.people.map((p) => p.id);
+  if (expense) setParticipantModeFromSelection(trip, expense);
+  else participantMode = "all";
+  $("#amount").value = expense?.amount || "";
+  $("#item").value = expense?.title || "";
+  $("#expenseDate").value = expense?.date || today();
+  $("#currency").value = expense?.currency || "CNY";
+  $("#category").value = expense?.category || $("#category").value;
+  $("#payer").value = expense?.payer || $("#payer").value;
   $("#conversion").textContent = "";
   renderPeoplePick();
+}
+
+function openExpenseSheet(id = null) {
+  const trip = activeTrip();
+  const expense = id ? trip.expenses.find((e) => e.id === id) : null;
+  resetExpenseForm(expense);
+  $("#sheet").showModal();
 }
 
 function renderPeoplePick() {
@@ -244,8 +264,8 @@ function renderPeoplePick() {
     selected = selected.filter((id) => id !== payerId);
   } else if (participantMode === "all") {
     selected = trip.people.map((p) => p.id);
-  } else if (!selected.includes(payerId)) {
-    selected.push(payerId);
+  } else {
+    selected = [...new Set([payerId, ...selected])];
   }
   const isAll = participantMode === "all" && !isBorrow;
   $("#peoplePick").innerHTML = `<button data-all class="${isAll ? "on" : ""}" ${isBorrow ? "disabled" : ""}>全部</button>` + trip.people.map((p) => {
@@ -271,7 +291,7 @@ function renderPeoplePick() {
         selected = isBorrow ? [button.dataset.id] : Array.from(new Set([payerId, button.dataset.id]));
       } else {
         selected = selected.includes(button.dataset.id) ? selected.filter((x) => x !== button.dataset.id) : [...selected, button.dataset.id];
-        if (!isBorrow && !selected.includes(payerId)) selected.push(payerId);
+        if (!isBorrow) selected = [...new Set([payerId, ...selected])];
       }
       if (isBorrow) selected = selected.filter((id) => id !== payerId);
       renderPeoplePick();
@@ -286,7 +306,13 @@ function saveExpense() {
   const category = $("#category").value;
   const currency = $("#currency").value;
   if (!amount || !title || !category || !selected.length) return;
-  trip.expenses.unshift({ id: crypto.randomUUID(), title, category, amount, currency, rate: rates[currency], payer: $("#payer").value, participants: [...selected], date: $("#expenseDate").value });
+  const nextExpense = { id: editingExpenseId || crypto.randomUUID(), title, category, amount, currency, rate: rates[currency], payer: $("#payer").value, participants: [...selected], date: $("#expenseDate").value };
+  if (editingExpenseId) {
+    trip.expenses = trip.expenses.map((e) => e.id === editingExpenseId ? nextExpense : e);
+  } else {
+    trip.expenses.unshift(nextExpense);
+  }
+  editingExpenseId = null;
   saveTrips();
   $("#sheet").close();
   renderDetail();
@@ -307,8 +333,7 @@ $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#add").onclick = () => {
-  resetExpenseForm();
-  $("#sheet").showModal();
+  openExpenseSheet();
 };
 $("[data-close]").onclick = () => $("#sheet").close();
 $("#save").onclick = $("#saveTop").onclick = saveExpense;
