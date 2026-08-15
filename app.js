@@ -1,5 +1,5 @@
-const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, USD: 7.18, EUR: 7.85 };
-const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", USD: "$", EUR: "€" };
+const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, EUR: 7.85 };
+const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", EUR: "€" };
 const typeOptions = [
   ["酒店", "🛏️"],
   ["机票", "✈️"],
@@ -53,6 +53,7 @@ function loadTrips() {
   return [{
     id: crypto.randomUUID(),
     name: "东京朋友旅行",
+    demo: true,
     destination: "",
     startDate: "2026-08-12",
     endDate: "2026-08-17",
@@ -92,16 +93,27 @@ function renderHome() {
   $("#tripCount").textContent = `${trips.length} 个`;
   $("#tripList").innerHTML = trips.map((trip) => {
     const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
-    return `<article class="trip-card" data-id="${trip.id}">
-      <div><b>${trip.name}</b><span>${dateRange(trip)} · ${trip.people.length}人</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
-      <strong>${money(total)}</strong>
+    const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+    return `<article class="swipe-row" data-trip-id="${trip.id}">
+      <div class="swipe-content trip-card">
+        <div><b>${trip.name}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${dateRange(trip)} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
+        <strong>${money(total)}</strong>
+      </div>
+      <button class="delete-action" type="button" data-delete-trip="${trip.id}">删除</button>
     </article>`;
   }).join("");
-  document.querySelectorAll(".trip-card").forEach((card) => {
+  setupSwipeRows("#tripList");
+  document.querySelectorAll("[data-trip-id] .swipe-content").forEach((card) => {
     card.onclick = () => {
-      activeTripId = card.dataset.id;
+      activeTripId = card.closest("[data-trip-id]").dataset.tripId;
       saveTrips();
       showDetail();
+    };
+  });
+  document.querySelectorAll("[data-delete-trip]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      deleteTrip(button.dataset.deleteTrip);
     };
   });
 }
@@ -171,10 +183,20 @@ function renderDetail() {
     const payer = person(trip, e.payer);
     const dateText = e.date ? `${e.date} · ` : "";
     const rateText = e.currency === "CNY" ? "" : ` · 汇率 ${rateOf(e)}`;
-    return `<article class="expense" data-expense-id="${e.id}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与${rateText}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></article>`;
+    return `<article class="swipe-row" data-expense-row="${e.id}">
+      <div class="swipe-content expense" data-expense-id="${e.id}"><span class="icon">${icons[e.category] || "✦"}</span><div class="main"><b>${e.title}</b><span>${dateText}${e.category} · ${payer.name} 先付 · ${e.participants.length}人参与${rateText}</span></div><div class="amt"><b>${money(cnyAmount(e))}</b><span>${symbols[e.currency]}${Number(e.amount).toLocaleString()} ${e.currency}</span></div></div>
+      <button class="delete-action" type="button" data-delete-expense="${e.id}">删除</button>
+    </article>`;
   }).join("") : `<p class="empty">还没有记录，点下方“记一笔”。</p>`;
+  setupSwipeRows("#list");
   document.querySelectorAll("[data-expense-id]").forEach((row) => {
     row.onclick = () => openExpenseSheet(row.dataset.expenseId);
+  });
+  document.querySelectorAll("[data-delete-expense]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      deleteExpense(button.dataset.deleteExpense);
+    };
   });
   const balances = calc(trip);
   const transfers = settle(trip, balances);
@@ -183,6 +205,96 @@ function renderDetail() {
   $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
   $("#share").onclick = () => navigator.share?.({ title: `${trip.name}结算`, text: transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清" });
   renderStats(trip);
+}
+
+function closeSwipeRows(except = null) {
+  document.querySelectorAll(".swipe-row.open").forEach((row) => {
+    if (row !== except) row.classList.remove("open");
+  });
+}
+
+function setupSwipeRows(scope) {
+  document.querySelectorAll(`${scope} .swipe-row`).forEach((row) => {
+    if (row.dataset.swipeBound === "1") return;
+    row.dataset.swipeBound = "1";
+    const content = row.querySelector(".swipe-content");
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let dragging = false;
+    let horizontal = false;
+    row.addEventListener("touchstart", (event) => {
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      currentX = 0;
+      dragging = true;
+      horizontal = false;
+      closeSwipeRows(row);
+    }, { passive: true });
+    row.addEventListener("touchmove", (event) => {
+      if (!dragging) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (!horizontal && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy) * 1.15) horizontal = true;
+      if (!horizontal) return;
+      event.preventDefault();
+      currentX = Math.max(-82, Math.min(0, dx + (row.classList.contains("open") ? -82 : 0)));
+      if (content) content.style.transform = `translateX(${currentX}px)`;
+    }, { passive: false });
+    row.addEventListener("touchend", () => {
+      if (!dragging) return;
+      if (content) content.style.transform = "";
+      if (horizontal) {
+        if (currentX < -22) {
+          closeSwipeRows(row);
+          row.classList.add("open");
+        } else {
+          row.classList.remove("open");
+        }
+      }
+      dragging = false;
+      horizontal = false;
+    }, { passive: true });
+    row.addEventListener("click", (event) => {
+      if (row.classList.contains("open") && !event.target.closest(".delete-action")) {
+        row.classList.remove("open");
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+  });
+}
+
+function deleteTrip(id) {
+  const trip = trips.find((t) => t.id === id);
+  if (!trip) return;
+  showConfirm({
+    title: "请您确认是否删除",
+    message: `删除旅行「${trip.name}」？里面的账单也会一起删除。`,
+    onConfirm: () => {
+      trips = trips.filter((t) => t.id !== id);
+      if (activeTripId === id) activeTripId = trips[0]?.id || "";
+      saveTrips();
+      renderHome();
+    }
+  });
+}
+
+function deleteExpense(id) {
+  const trip = activeTrip();
+  const expense = trip?.expenses.find((e) => e.id === id);
+  if (!trip || !expense) return;
+  showConfirm({
+    title: "请您确认是否删除",
+    message: `删除这条账单「${expense.title}」？`,
+    onConfirm: () => {
+      trip.expenses = trip.expenses.filter((e) => e.id === id ? false : true);
+      saveTrips();
+      renderDetail();
+    }
+  });
 }
 
 function usedForeignCurrencies(trip) {
@@ -215,7 +327,7 @@ function renderStats(trip) {
     const stat = statsFor(trip, p.id);
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
     return `<details class="stat-card">
-      <summary>${avatar(p)}<div><b>${p.name}</b><span>个人消费 ${money(stat.total)}</span></div><strong>明细</strong></summary>
+      <summary>${avatar(p)}<div><b>${p.name}</b><span>个人消费金额总计</span></div><strong class="stat-total">${money(stat.total)}</strong></summary>
       <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${cat}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
       <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${e.title}</b><small>${e.date ? `${e.date} · ` : ""}${e.category}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
     </details>`;
@@ -458,6 +570,41 @@ function saveExpense() {
   renderDetail();
 }
 
+function showConfirm({ title, message, onConfirm }) {
+  document.querySelector(".app-confirm-mask")?.remove();
+  const mask = document.createElement("div");
+  mask.className = "app-confirm-mask";
+  mask.innerHTML = `
+    <div class="app-confirm" role="dialog" aria-modal="true">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(message)}</p>
+      <div class="app-confirm-actions">
+        <button type="button" class="app-confirm-cancel">取消</button>
+        <button type="button" class="app-confirm-delete">确认删除</button>
+      </div>
+    </div>`;
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  mask.addEventListener("click", (event) => {
+    if (event.target === mask) close();
+  });
+  mask.querySelector(".app-confirm-cancel").onclick = close;
+  mask.querySelector(".app-confirm-delete").onclick = () => {
+    close();
+    onConfirm?.();
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[ch]));
+}
+
 function clearErrors() {
   document.querySelectorAll(".invalid").forEach((el) => el.classList.remove("invalid"));
 }
@@ -548,8 +695,14 @@ $("#backHome").onclick = showHome;
 $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
-$("#tripPeopleCount").oninput = syncAvatarDrafts;
-$("#tripNicknames").oninput = syncAvatarDrafts;
+$("#tripPeopleCount").oninput = () => {
+  $("#tripPeopleCount").classList.remove("invalid");
+  syncAvatarDrafts();
+};
+$("#tripNicknames").oninput = () => {
+  $("#tripNicknames").classList.remove("invalid");
+  syncAvatarDrafts();
+};
 $("#avatarChooser").onclick = (event) => {
   const button = event.target.closest("[data-avatar-person]");
   if (!button) return;
