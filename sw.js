@@ -1,36 +1,5 @@
-const CACHE_NAME = "yiqizou-v23";
-const APP_FILES = [
-  "./",
-  "index.html?v=23",
-  "style.css?v=23",
-  "avatars.js?v=23",
-  "app.js?v=23",
-  "manifest.webmanifest?v=23",
-  "assets/avatars/cat-01.png"
-];
-
-self.addEventListener("install", (event) => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_FILES)));
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-  event.respondWith(
-    fetch(event.request, { cache: "no-store" })
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
-});
+const C='haoyouji-v20';
+const ASSETS=['./','index.html','style.css?v=20','avatars.js?v=20','app.js?v=20','manifest.webmanifest','assets/brand/tt-transfer.svg','assets/brand/app-icon-180.png','assets/brand/app-icon-192.png','assets/brand/app-icon-512.png','assets/banners/multi-currency.jpg','assets/banners/participants.jpg','assets/banners/borrow.jpg','assets/banners/settlement.jpg','assets/banners/personal-stats.jpg'];
+self.addEventListener('install',event=>event.waitUntil(caches.open(C).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==C).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',event=>event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(C).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request))));

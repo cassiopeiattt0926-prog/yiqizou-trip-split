@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 56" role="img" aria-labelledby="title">
+  <title id="title">好友记 TT Transfer Logo</title>
+  <g fill="none" stroke="#073f30" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 18h38M28 8v31c0 7 4 10 11 10 4 0 7-1 10-4"/>
+    <path d="M64 18h20M70 18v21c0 7 4 10 10 10 3 0 5-1 7-3"/>
+  </g>
+  <rect x="52" y="13" width="10" height="10" rx="3" fill="#ff6848"/>
+</svg>
