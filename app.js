@@ -29,6 +29,11 @@ const legacySeed = [
 ].map((x, i) => ({ id: String(i), title: x[0], category: x[1], amount: x[2], currency: x[3], rate: x[4], payer: x[5], participants: x[6] }));
 const $ = (s) => document.querySelector(s);
 const money = (n) => "¥" + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const today = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+};
 let trips = loadTrips();
 let activeTripId = localStorage.getItem("yiqizou-active-trip") || trips[0]?.id;
 let selected = [];
@@ -150,6 +155,29 @@ function renderDetail() {
   $("#settleCount").textContent = `${transfers.length} 笔即可结清`;
   $("#transfers").innerHTML = transfers.length ? transfers.map((x) => `<article>${avatar(person(trip, x.from))}<div><b>${person(trip, x.from).name} 支付给 ${person(trip, x.to).name}</b><span>建议备注“${trip.name}”</span></div><strong>${money(x.n)}</strong></article>`).join("") : `<p class="empty">现在已经结清。</p>`;
   $("#share").onclick = () => navigator.share?.({ title: `${trip.name}结算`, text: transfers.map((x) => `${person(trip, x.from).name} → ${person(trip, x.to).name} ${money(x.n)}`).join("\n") || "已结清" });
+  renderStats(trip);
+}
+
+function statsFor(trip, personId) {
+  const rows = trip.expenses.filter((e) => e.participants.includes(personId)).map((e) => ({ ...e, share: e.amount * e.rate / e.participants.length }));
+  const total = rows.reduce((s, e) => s + e.share, 0);
+  const cats = {};
+  rows.forEach((e) => {
+    cats[e.category] = (cats[e.category] || 0) + e.share;
+  });
+  return { rows, total, cats };
+}
+
+function renderStats(trip) {
+  $("#statsList").innerHTML = trip.people.map((p) => {
+    const stat = statsFor(trip, p.id);
+    const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
+    return `<details class="stat-card">
+      <summary>${avatar(p)}<div><b>${p.name}</b><span>个人消费 ${money(stat.total)}</span></div><strong>明细</strong></summary>
+      <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${cat}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
+      <div class="mini-list">${stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${e.title}</b><small>${e.date ? `${e.date} · ` : ""}${e.category}</small></div><strong>${money(e.share)}</strong></article>`).join("")}</div>
+    </details>`;
+  }).join("");
 }
 
 function openTripSheet(id = null) {
@@ -201,7 +229,7 @@ function resetExpenseForm() {
   participantMode = "all";
   $("#amount").value = "";
   $("#item").value = "";
-  $("#expenseDate").value = "";
+  $("#expenseDate").value = today();
   $("#currency").value = "CNY";
   $("#conversion").textContent = "";
   renderPeoplePick();
@@ -226,8 +254,13 @@ function renderPeoplePick() {
     return `<button data-id="${p.id}" class="${isOn ? "on" : ""}" ${disabled ? "disabled" : ""}>${p.name}</button>`;
   }).join("");
   $("#peoplePick").querySelector("[data-all]").onclick = () => {
-    participantMode = "all";
-    selected = trip.people.map((p) => p.id);
+    if (participantMode === "all") {
+      participantMode = "partial";
+      selected = isBorrow ? [] : [payerId];
+    } else {
+      participantMode = "all";
+      selected = trip.people.map((p) => p.id);
+    }
     renderPeoplePick();
   };
   $("#peoplePick").querySelectorAll("[data-id]").forEach((button) => {
@@ -265,6 +298,7 @@ document.querySelectorAll("nav button").forEach((button) => {
     button.classList.add("active");
     $("#bills").classList.toggle("hidden", button.dataset.tab !== "bills");
     $("#settle").classList.toggle("hidden", button.dataset.tab !== "settle");
+    $("#stats").classList.toggle("hidden", button.dataset.tab !== "stats");
   };
 });
 $("#newTrip").onclick = () => openTripSheet();
