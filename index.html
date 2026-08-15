@@ -13,7 +13,7 @@
   <section id="tripHome">
     <header>
       <div class="title left"><b>一起走</b><span>朋友旅行项目</span></div>
-      <button id="newTrip" class="round">＋</button>
+      <button id="newTrip" class="new-trip-btn">＋ 新建旅行</button>
     </header>
     <section class="hero">
       <span>我的旅行账本</span>
@@ -29,9 +29,9 @@
 
   <section id="tripDetail" class="hidden">
     <header>
-      <button id="backHome" class="round">‹</button>
+      <button id="backHome" class="text-btn">返回</button>
       <div class="title"><b id="tripTitle">旅行</b><span id="tripMeta"></span></div>
-      <button id="editTrip" class="round">•••</button>
+      <button id="editTrip" class="text-btn">编辑</button>
     </header>
     <section class="hero">
       <span>旅程总支出</span>
@@ -72,7 +72,7 @@
     </div>
   </div>
   <label>总参与人数 <span class="req">*</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
-  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, qy, bb, hy"></label>
+  <label>每个人昵称 <span class="req">*</span><input id="tripNicknames" required placeholder="例如：tt, qy, bb, xw"></label>
   <p class="hint small">昵称用逗号或空格分开，之后记账时直接点选。</p>
   <button id="saveTrip" class="wide">保存旅行项目</button>
 </dialog>
@@ -80,7 +80,7 @@
 <dialog id="sheet">
   <div class="grab"></div>
   <div class="sheet-head"><button data-close>取消</button><h2>记一笔</h2><button id="saveTop">保存</button></div>
-  <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>JPY</option><option>KRW</option><option>USD</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
+  <label>花了多少 <span class="req">*</span><div class="amount-row"><select id="currency"><option>CNY</option><option>USD</option><option>JPY</option><option>KRW</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
   <p id="conversion"></p>
   <label>日期 <em>选填</em><input id="expenseDate" type="date"></label>
   <div class="two">
