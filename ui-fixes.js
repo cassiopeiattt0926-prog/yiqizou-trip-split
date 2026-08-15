@@ -4,6 +4,9 @@
   const readTrips = () => JSON.parse(localStorage.getItem(tripKey) || "[]");
   const writeTrips = (trips) => localStorage.setItem(tripKey, JSON.stringify(trips));
   const isDemoTrip = (trip) => trip?.demo || (trip?.name === "东京朋友旅行" && trip?.expenses?.some((e) => e.title === "BB借钱给TT"));
+  const extraCurrencies = ["SGD", "MYR", "THB", "GBP"];
+  const extraRates = { SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18 };
+  const extraSymbols = { SGD: "S$", MYR: "RM", THB: "฿", GBP: "£" };
 
   function addDemoMarks() {
     const trips = readTrips();
@@ -171,8 +174,63 @@
   }
 
   function enhance() {
+    enhanceCurrencies();
+    enhanceFloatingButtons();
+    enhanceTripValidation();
+    normalizeCurrencySymbols();
     addDemoMarks();
     enhanceSwipeDelete();
+  }
+
+  function enhanceCurrencies() {
+    const select = document.getElementById("currency");
+    if (!select || select.dataset.extraCurrenciesReady) return;
+    select.dataset.extraCurrenciesReady = "1";
+    const existing = new Set([...select.options].map((option) => option.value));
+    const eur = [...select.options].find((option) => option.value === "EUR");
+    extraCurrencies.forEach((currency) => {
+      if (existing.has(currency)) return;
+      const option = document.createElement("option");
+      option.value = currency;
+      option.textContent = currency;
+      select.insertBefore(option, eur || null);
+    });
+    select.addEventListener("change", () => {
+      const rateInput = document.getElementById("rateInput");
+      if (rateInput && extraRates[select.value]) {
+        rateInput.value = extraRates[select.value];
+        rateInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    if (extraRates[select.value]) {
+      const rateInput = document.getElementById("rateInput");
+      if (rateInput && (!rateInput.value || Number(rateInput.value) === 1)) rateInput.value = extraRates[select.value];
+    }
+    normalizeCurrencySymbols();
+  }
+
+  function normalizeCurrencySymbols() {
+    document.querySelectorAll(".amt span").forEach((span) => {
+      Object.entries(extraSymbols).forEach(([currency, symbol]) => {
+        if (span.textContent.includes(currency)) span.textContent = span.textContent.replace("undefined", symbol);
+      });
+    });
+  }
+
+  function enhanceFloatingButtons() {
+    document.querySelectorAll(".fab").forEach((button) => {
+      button.style.zIndex = "75";
+      button.style.bottom = "calc(28px + env(safe-area-inset-bottom))";
+    });
+  }
+
+  function enhanceTripValidation() {
+    ["tripPeopleCount", "tripNicknames", "tripName"].forEach((id) => {
+      const input = document.getElementById(id);
+      if (!input || input.dataset.clearInvalidReady) return;
+      input.dataset.clearInvalidReady = "1";
+      input.addEventListener("input", () => input.classList.remove("invalid"));
+    });
   }
 
   new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
