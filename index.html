@@ -58,14 +58,16 @@
 <dialog id="tripSheet">
   <div class="grab"></div>
   <div class="sheet-head"><button data-trip-close>取消</button><h2 id="tripSheetTitle">新建旅行</h2><button id="saveTripTop">保存</button></div>
-  <label>旅行名称<input id="tripName" placeholder="例如：东京朋友旅行"></label>
-  <label>目的地<input id="tripDestination" placeholder="例如：日本东京"></label>
-  <div class="two">
-    <label>开始日期<input id="tripStart" type="date"></label>
-    <label>结束日期<input id="tripEnd" type="date"></label>
+  <label>旅行名称 <span class="req">必填</span><input id="tripName" required placeholder="例如：东京朋友旅行"></label>
+  <div class="date-group">
+    <span>旅行日期 <em>选填</em></span>
+    <div class="two">
+      <input id="tripStart" type="date" aria-label="开始日期">
+      <input id="tripEnd" type="date" aria-label="结束日期">
+    </div>
   </div>
-  <label>总参与人数<input id="tripPeopleCount" type="number" inputmode="numeric" min="1" placeholder="例如：4"></label>
-  <label>每个人昵称<input id="tripNicknames" placeholder="例如：tt, qy, bb, hy"></label>
+  <label>总参与人数 <span class="req">必填</span><input id="tripPeopleCount" type="number" inputmode="numeric" min="1" required placeholder="例如：4"></label>
+  <label>每个人昵称 <span class="req">必填</span><input id="tripNicknames" required placeholder="例如：tt, qy, bb, hy"></label>
   <p class="hint small">昵称用逗号或空格分开，之后记账时直接点选。</p>
   <button id="saveTrip" class="wide">保存旅行项目</button>
 </dialog>
@@ -73,14 +75,15 @@
 <dialog id="sheet">
   <div class="grab"></div>
   <div class="sheet-head"><button data-close>取消</button><h2>记一笔</h2><button id="saveTop">保存</button></div>
-  <label>花了多少<div class="amount-row"><select id="currency"><option>CNY</option><option>JPY</option><option>KRW</option><option>USD</option><option>EUR</option></select><input id="amount" inputmode="decimal" placeholder="0"></div></label>
+  <label>花了多少 <span class="req">必填</span><div class="amount-row"><select id="currency"><option>CNY</option><option>JPY</option><option>KRW</option><option>USD</option><option>EUR</option></select><input id="amount" inputmode="decimal" required placeholder="0"></div></label>
   <p id="conversion"></p>
-  <label>事项<input id="item" placeholder="例如：机场去酒店"></label>
+  <label>日期 <em>选填</em><input id="expenseDate" type="date"></label>
   <div class="two">
-    <label>类型<select id="category" required></select></label>
-    <label>谁先付<select id="payer"></select></label>
+    <label>类型 <span class="req">必填</span><select id="category" required></select></label>
+    <label>谁先付 <span class="req">必填</span><select id="payer" required></select></label>
   </div>
-  <label>谁参与<div id="peoplePick" class="people-pick"></div></label>
+  <label>谁参与 <span class="req">必填</span><div id="peoplePick" class="people-pick"></div></label>
+  <label>事项 <span class="req">必填</span><input id="item" required placeholder="例如：机场去酒店"></label>
   <button id="save" class="wide">保存并平均分摊</button>
 </dialog>
 <script src="app.js"></script>
