@@ -1,6 +1,6 @@
-const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, EUR: 7.85 };
+const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22, GBP: 9.18, USD: 7.18, HKD: 0.92, EUR: 7.85 };
 const RatePolicy = window.HAOYOUJI_RATE_POLICY;
-const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", EUR: "€" };
+const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", HKD: "HK$", EUR: "€" };
 const APP_URL = "https://cassiopeiattt0926-prog.github.io/yiqizou-trip-split/";
 // 固定官网地址的二维码矩阵（M 级纠错）。内置后生成分享图不依赖网络或第三方二维码服务。
 const APP_QR = [
@@ -149,7 +149,7 @@ function person(trip, id) {
 
 function dateRange(trip) {
   if (!trip.startDate && !trip.endDate) return "日期待定";
-  if (trip.startDate && trip.endDate) return `${trip.startDate} — ${trip.endDate}`;
+  if (trip.startDate && trip.endDate) return `${trip.startDate}～${trip.endDate}`;
   return trip.startDate || trip.endDate;
 }
 
@@ -312,20 +312,14 @@ function drawQrFooter(ctx, width, top) {
   ctx.strokeStyle = "#e1e5dc";
   ctx.lineWidth = 2;
   ctx.stroke();
-  const qrSize = drawQrCode(ctx, 88, top + 27, 196);
+  drawQrCode(ctx, 88, top + 27, 196);
   ctx.textAlign = "left";
   ctx.fillStyle = "#073f30";
   ctx.font = '700 34px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("扫描二维码，开始使用好友记", 330, top + 88);
+  ctx.fillText("好友使用好友记", 330, top + 88);
   ctx.fillStyle = "#718078";
   ctx.font = '24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("好友一起出游，记账分摊更省心", 330, top + 135);
-  ctx.font = '20px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText(APP_URL, 330, top + 183);
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#98a49d";
-  ctx.font = '20px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("扫码使用", 88 + qrSize / 2, top + 231);
+  ctx.fillText("出游记账分摊更省心", 330, top + 135);
 }
 
 function canvasFile(canvas, name) {
@@ -422,8 +416,7 @@ function personalShareText(trip, p, stat) {
     `${trip.name} · ${p.name}`,
     `个人消费金额总计 ${money(stat.total)}`,
     ...categoryLines,
-    ...detailLines,
-    APP_URL
+    ...detailLines
   ].join("\n");
 }
 
@@ -969,7 +962,7 @@ function saveTrip() {
 function updateTripDateRangeButton() {
   const start = $("#tripStart").value;
   const end = $("#tripEnd").value;
-  $("#tripDateRangeButton").textContent = start && end ? `${start} — ${end}` : start ? `${start} — 选择结束日期` : "选择开始和结束日期";
+  $("#tripDateRangeButton").textContent = start && end ? `${start}～${end}` : start ? `${start}～选择结束日期` : "选择开始和结束日期";
 }
 
 function formatDate(d) {
@@ -998,7 +991,7 @@ function renderCalendar() {
     return `<button type="button" data-date="${iso}" class="${isStart ? "start" : ""} ${isEnd ? "end" : ""} ${inRange ? "range" : ""} ${isToday ? "today" : ""}"><span>${n}</span>${isToday ? "<small>today</small>" : ""}</button>`;
   }).join("");
   $("#calendarGrid").innerHTML = blanks + cells;
-  $("#calendarHint").textContent = start && end ? `${start} 到 ${end}` : start ? "请选择结束日期" : "先选择开始日期";
+  $("#calendarHint").textContent = start && end ? `${start}～${end}` : start ? "请选择结束日期" : "先选择开始日期";
 }
 
 function pickTripDate(iso) {
@@ -1054,7 +1047,7 @@ function openExpenseSheet(id = null) {
   resetExpenseForm(expense);
   $("#sheet").showModal();
   $("#sheet").scrollTop = 0;
-  if (!expense) focusForTyping($("#amount"));
+  if (!expense) focusForTyping($("#amount"), { liftSheet: true });
 }
 
 function renderPeoplePick() {
@@ -1182,15 +1175,45 @@ function focusInvalid(el) {
   }, 250);
 }
 
-function focusForTyping(el) {
+function keepCaretVisible(el, moveToEnd = false) {
+  if (!el || typeof el.setSelectionRange !== "function") return;
+  const end = String(el.value || "").length;
+  if (moveToEnd) el.setSelectionRange(end, end);
+  if (moveToEnd || el.selectionEnd === end) {
+    requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth; });
+  }
+}
+
+let stableViewportHeight = window.visualViewport?.height || window.innerHeight;
+function syncKeyboardLift(forceAmountLift = false) {
+  const active = document.activeElement;
+  document.querySelectorAll("dialog.keyboard-visible").forEach((dialog) => {
+    dialog.classList.remove("keyboard-visible");
+    dialog.style.removeProperty("--keyboard-lift");
+  });
+  const dialog = active?.closest?.("dialog[open]");
+  const viewport = window.visualViewport;
+  if (!dialog || !viewport || !active.matches("input,select")) {
+    stableViewportHeight = Math.max(stableViewportHeight, viewport?.height || window.innerHeight);
+    return;
+  }
+  const layoutHeight = Math.max(stableViewportHeight, document.documentElement.clientHeight, window.innerHeight);
+  const keyboardHeight = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches;
+  if (keyboardHeight < 70 && !(forceAmountLift && coarsePointer)) return;
+  if (active.id !== "amount" && keyboardHeight < 110) return;
+  const lift = Math.min(170, Math.max(72, keyboardHeight * 0.42));
+  dialog.style.setProperty("--keyboard-lift", `${Math.round(lift)}px`);
+  dialog.classList.add("keyboard-visible");
+  requestAnimationFrame(() => active.scrollIntoView({ behavior: "smooth", block: active.id === "amount" ? "start" : "center" }));
+}
+
+function focusForTyping(el, options = {}) {
   if (!el) return;
   const focus = () => {
     try {
       el.focus({ preventScroll: true });
-      if (typeof el.setSelectionRange === "function") {
-        const end = String(el.value || "").length;
-        el.setSelectionRange(end, end);
-      }
+      keepCaretVisible(el, true);
     } catch (_) {
       el.focus();
     }
@@ -1199,6 +1222,7 @@ function focusForTyping(el) {
   requestAnimationFrame(() => {
     focus();
     el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (options.liftSheet) setTimeout(() => syncKeyboardLift(true), 120);
   });
 }
 
@@ -1381,6 +1405,7 @@ $("[data-trip-close]").onclick = () => $("#tripSheet").close();
 $("#saveTrip").onclick = $("#saveTripTop").onclick = saveTrip;
 $("#tripDateRangeButton").onclick = () => $("#tripDateRangePanel").classList.toggle("hidden");
 $("#tripName").oninput = () => {
+  keepCaretVisible($("#tripName"));
   $("#tripName").classList.remove("invalid");
   updateTripSaveState();
 };
@@ -1390,6 +1415,7 @@ $("#tripPeopleCount").oninput = () => {
   updateTripSaveState();
 };
 $("#tripNicknames").oninput = () => {
+  keepCaretVisible($("#tripNicknames"));
   $("#tripNicknames").classList.remove("invalid");
   syncAvatarDrafts();
   updateTripSaveState();
@@ -1442,7 +1468,10 @@ $("#payer").onchange = () => {
   renderPeoplePick();
   updateExpenseSaveState();
 };
-$("#item").oninput = updateExpenseSaveState;
+$("#item").oninput = () => {
+  keepCaretVisible($("#item"));
+  updateExpenseSaveState();
+};
 $("#amount").oninput = () => {
   updateConversion();
   updateExpenseSaveState();
@@ -1463,8 +1492,12 @@ $("#peoplePick").addEventListener("click", (event) => {
     toggleParticipant(button);
   }
 });
+document.addEventListener("focusin", () => setTimeout(() => syncKeyboardLift(), 90));
+document.addEventListener("focusout", () => setTimeout(() => syncKeyboardLift(), 140));
+window.visualViewport?.addEventListener("resize", () => syncKeyboardLift());
+window.visualViewport?.addEventListener("scroll", () => syncKeyboardLift());
 saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=28");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=29");
