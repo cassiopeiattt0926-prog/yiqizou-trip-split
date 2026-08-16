@@ -68,12 +68,16 @@ nav .active{color:var(--green);border-bottom:3px solid var(--green)}
 .app-confirm-cancel{background:#eef2ed;color:#0d5b42}
 .app-confirm-delete{background:#e85c42;color:#fff}
 .app-toast{position:fixed;z-index:100;left:50%;bottom:calc(112px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:calc(100vw - 40px);padding:10px 14px;border-radius:999px;background:#17211de8;color:#fff;font-size:12px;box-shadow:0 8px 24px #0003;white-space:nowrap}
-.trip-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px 15px}
+.trip-card{display:flex;align-items:stretch;justify-content:space-between;gap:14px;padding:17px 15px}
 .trip-card div{min-width:0;display:flex;flex-direction:column}
 .trip-card b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trip-card span{font-size:11px;color:var(--muted);margin-top:5px}
 .trip-card strong{white-space:nowrap}
-.demo-badge{display:inline-flex!important;vertical-align:middle;margin:0 0 0 6px!important;padding:2px 6px;border-radius:999px;background:#fff0e9;color:var(--orange)!important;font-size:10px!important;font-weight:800}
+.trip-card .trip-card-info{flex:1;min-width:0}
+.trip-card .trip-card-side{flex:0 0 auto;align-items:flex-end;justify-content:space-between;min-width:max-content}
+.trip-card-side strong{margin:auto 0;line-height:1.35}
+.trip-card-side-spacer{height:19px;margin:0!important}
+.demo-badge{display:inline-flex!important;align-items:center;justify-content:center;height:19px;margin:0!important;padding:0 7px;border-radius:999px;background:#fff0e9;color:var(--orange)!important;font-size:10px!important;font-weight:800;line-height:19px}
 .demo-notice{margin:0 20px 10px;padding:9px 11px;border-radius:12px;background:#fff0e9;color:#9b4b37;font-size:11px;line-height:1.5}
 .demo-notice b{display:inline-block;margin-right:4px;color:var(--orange)}
 .trip-members{display:flex!important;flex-direction:row!important;flex-wrap:wrap;margin-top:9px}
