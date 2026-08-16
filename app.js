@@ -306,28 +306,36 @@ function drawQrCode(ctx, x, y, size) {
 }
 
 function drawQrFooter(ctx, width, top) {
+  const qrTargetSize = 176;
+  const qrModules = APP_QR.length + 8;
+  const qrActualSize = Math.floor(qrTargetSize / qrModules) * qrModules;
+  const verticalPadding = 22;
+  const cardHeight = qrActualSize + verticalPadding * 2;
   ctx.fillStyle = "#ffffff";
-  roundedRect(ctx, 60, top, width - 120, 250, 32);
+  roundedRect(ctx, 60, top, width - 120, cardHeight, 32);
   ctx.fill();
   ctx.strokeStyle = "#e1e5dc";
   ctx.lineWidth = 2;
   ctx.stroke();
-  drawQrCode(ctx, 88, top + 27, 196);
+  drawQrCode(ctx, 88, top + verticalPadding, qrTargetSize);
   ctx.textAlign = "left";
   ctx.fillStyle = "#073f30";
-  ctx.font = '700 34px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("好友使用好友记", 330, top + 88);
+  ctx.font = '700 31px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("扫描二维码，开始使用好友记", 300, top + 82);
   ctx.fillStyle = "#718078";
-  ctx.font = '24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("出游记账分摊更省心", 330, top + 135);
+  ctx.font = '23px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+  ctx.fillText("好友出游，记账分摊更省心", 300, top + 128);
 }
 
 function canvasFile(canvas, name) {
-  const dataUrl = canvas.toDataURL("image/png");
+  // JPEG 在 iOS 的微信、小红书等分享扩展中兼容性比 Canvas PNG 更稳定。
+  const mimeType = "image/jpeg";
+  const fileName = String(name || "好友记清单.jpg").replace(/\.png$/i, ".jpg");
+  const dataUrl = canvas.toDataURL(mimeType, 0.94);
   const binary = atob(dataUrl.split(",")[1]);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new File([bytes], name, { type: "image/png" });
+  return new File([bytes], fileName, { type: mimeType, lastModified: Date.now() });
 }
 
 function settlementShareFile(trip, transfers) {
@@ -402,7 +410,7 @@ function settlementShareFile(trip, transfers) {
     ctx.fillText(money(transfer.n), 980, y + 72);
   });
 
-  drawQrFooter(ctx, width, height - 290);
+  drawQrFooter(ctx, width, height - 238);
   const safeName = tripName.replace(/[\\/:*?"<>|]/g, "-").slice(0, 30) || "旅行";
   return canvasFile(canvas, `好友记-${safeName}-结算单.png`);
 }
@@ -480,7 +488,7 @@ function personalShareFile(trip, p, stat) {
     y += 82;
   });
 
-  y += 42;
+  y += 64;
   ctx.fillStyle = "#17211d";
   ctx.font = '700 40px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("消费明细", 70, y);
@@ -508,7 +516,7 @@ function personalShareFile(trip, p, stat) {
     ctx.font = '22px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
     ctx.fillText(`另有 ${stat.rows.length - shownRows.length} 笔明细，请在好友记中查看`, 80, y + 10);
   }
-  drawQrFooter(ctx, width, height - 290);
+  drawQrFooter(ctx, width, height - 238);
   const safeTrip = String(trip.name || "旅行").replace(/[\\/:*?"<>|]/g, "-").slice(0, 24);
   const safePerson = String(p.name || "朋友").replace(/[\\/:*?"<>|]/g, "-").slice(0, 16);
   return canvasFile(canvas, `好友记-${safeTrip}-${safePerson}-个人消费清单.png`);
@@ -534,7 +542,8 @@ async function copySettlementText(text) {
 async function shareGeneratedImage(file, fallbackText, copiedMessage) {
   try {
     const shareData = { files: [file] };
-    if (navigator.share && navigator.canShare?.(shareData)) {
+    const canShareFiles = navigator.share && (!navigator.canShare || navigator.canShare(shareData));
+    if (canShareFiles && file?.size > 0 && /^image\/(jpeg|png)$/.test(file.type)) {
       // 只传图片文件，避免微信 iOS 分享扩展拒绝“图片 + 文字”混合类型。
       await navigator.share(shareData);
       return;
@@ -820,7 +829,7 @@ function renderStats(trip) {
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
     return `<article class="stat-swipe-row" data-stat-person="${escapeHtml(p.id)}">
       <details class="stat-card stat-swipe-content">
-        <summary>${avatar(p)}<div class="stat-person"><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><div class="stat-summary-end"><strong class="stat-total">${money(stat.total)}</strong><span class="stat-toggle"><span data-stat-toggle-text>查看明细</span><i aria-hidden="true">⌄</i></span></div></summary>
+        <summary>${avatar(p)}<div class="stat-person"><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><div class="stat-summary-end"><strong class="stat-total">${money(stat.total)}</strong><span class="stat-toggle"><span data-stat-toggle-text>查看明细</span><i aria-hidden="true"></i></span></div></summary>
         <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
         <div class="mini-list">${stat.rows.length ? stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("") : `<p class="empty">暂无消费明细</p>`}</div>
         <button class="wide personal-share" type="button" data-personal-share="${escapeHtml(p.id)}">生成${escapeHtml(p.name)}的个人消费清单</button>
@@ -1202,7 +1211,7 @@ function syncKeyboardLift(forceAmountLift = false) {
   const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches;
   if (keyboardHeight < 70 && !(forceAmountLift && coarsePointer)) return;
   if (active.id !== "amount" && keyboardHeight < 110) return;
-  const lift = Math.min(170, Math.max(72, keyboardHeight * 0.42));
+  const lift = Math.min(260, Math.max(140, keyboardHeight * 0.64));
   dialog.style.setProperty("--keyboard-lift", `${Math.round(lift)}px`);
   dialog.classList.add("keyboard-visible");
   requestAnimationFrame(() => active.scrollIntoView({ behavior: "smooth", block: active.id === "amount" ? "start" : "center" }));
@@ -1500,4 +1509,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=29");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=30");
