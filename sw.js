@@ -1,12 +1,13 @@
-const CACHE_NAME = "haoyouji-v31";
+const CACHE_NAME = "haoyouji-v33";
 const APP_FILES = [
   "./",
-  "index.html?v=31",
-  "style.css?v=31",
-  "avatars.js?v=31",
-  "rate-policy.js?v=31",
-  "app.js?v=31",
-  "manifest.webmanifest?v=31",
+  "index.html?v=33",
+  "style.css?v=33",
+  "avatars.js?v=33",
+  "demo-data.js?v=33",
+  "rate-policy.js?v=33",
+  "app.js?v=33",
+  "manifest.webmanifest?v=33",
   "assets/brand/tt-transfer.svg",
   "assets/brand/app-icon-180.png",
   "assets/brand/app-icon-192.png",

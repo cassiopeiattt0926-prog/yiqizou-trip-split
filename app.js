@@ -2,6 +2,10 @@ const rates = { CNY: 1, JPY: 0.049, KRW: 0.0053, SGD: 5.58, MYR: 1.68, THB: 0.22
 const RatePolicy = window.HAOYOUJI_RATE_POLICY;
 const symbols = { CNY: "¥", JPY: "¥", KRW: "₩", SGD: "S$", MYR: "RM", THB: "฿", GBP: "£", USD: "$", HKD: "HK$", EUR: "€" };
 const APP_URL = "https://cassiopeiattt0926-prog.github.io/yiqizou-trip-split/";
+const MY_FIRST_HALF_DEMO = window.HAOYOUJI_MY_FIRST_HALF_DEMO;
+const MY_FIRST_HALF_DEMO_MIGRATION_KEY = "haoyouji-my-first-half-demo-added-v1";
+const ORIGINAL_DEMO_NAME = "东京好友之旅";
+const ORIGINAL_DEMO_OLD_NAME = "东京朋友旅行";
 // 固定官网地址的二维码矩阵（M 级纠错）。内置后生成分享图不依赖网络或第三方二维码服务。
 const APP_QR = [
   "111111101110010010010001001111111",
@@ -39,7 +43,7 @@ const APP_QR = [
   "111111101110100111000101001010100"
 ];
 const typeOptions = [
-  ["酒店", "🛏️"],
+  ["酒店", "🏨"],
   ["机票", "✈️"],
   ["门票", "🎫"],
   ["打车", "🚕"],
@@ -67,6 +71,38 @@ const legacySeed = [
   ["鳗鱼饭", "餐饮", 13800, "JPY", 0.049, "bb", ["tt", "bb", "qq"]],
   ["森美术馆", "门票", 4000, "JPY", 0.049, "tt", ["tt", "bb"]]
 ].map((x, i) => ({ id: String(i), title: x[0], category: x[1], amount: x[2], currency: x[3], rate: x[4], payer: x[5], participants: x[6] }));
+
+function createMyFirstHalfDemo() {
+  if (!MY_FIRST_HALF_DEMO) return null;
+  const people = MY_FIRST_HALF_DEMO.people.map((p, i) => ({
+    ...p,
+    color: palette[i % palette.length]
+  }));
+  const idByName = new Map(people.map((p) => [p.name, p.id]));
+  const expenses = MY_FIRST_HALF_DEMO.expenses.map((expense, i) => ({
+    id: `my-first-half-${String(i + 1).padStart(2, "0")}`,
+    title: expense.title,
+    category: expense.category,
+    amount: expense.amount,
+    currency: expense.currency,
+    rate: expense.currency === "CNY" ? 1 : rates[expense.currency],
+    payer: idByName.get(expense.payer),
+    participants: expense.participants.map((name) => idByName.get(name)).filter(Boolean),
+    date: expense.date,
+    note: expense.note
+  }));
+  return {
+    id: MY_FIRST_HALF_DEMO.id,
+    name: MY_FIRST_HALF_DEMO.name,
+    demo: true,
+    destination: "",
+    startDate: MY_FIRST_HALF_DEMO.startDate,
+    endDate: MY_FIRST_HALF_DEMO.endDate,
+    peopleCount: people.length,
+    people,
+    expenses
+  };
+}
 const $ = (s) => document.querySelector(s);
 const finiteNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const money = (n) => "¥" + Math.abs(finiteNumber(n)).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -94,12 +130,54 @@ function loadTrips() {
   } catch (_) {
     saved = null;
   }
-  // 空数组也代表用户已经初始化并删除了全部项目，不能再次生成示例数据。
-  if (Array.isArray(saved)) return saved;
+  // 新示例仅随本次升级加入一次；用户删除后，刷新页面不会再次出现。
+  if (Array.isArray(saved)) {
+    // 仅迁移内置旧示例的标题，保留用户已有的项目、账单和当前排序。
+    let originalDemoRenamed = false;
+    saved = saved.map((trip) => {
+      const isOriginalDemo = trip?.name === ORIGINAL_DEMO_OLD_NAME &&
+        (trip.demo || trip.expenses?.some((expense) => expense.title === "BB借钱给TT"));
+      if (!isOriginalDemo) return trip;
+      originalDemoRenamed = true;
+      return { ...trip, name: ORIGINAL_DEMO_NAME };
+    });
+    if (originalDemoRenamed) {
+      try {
+        localStorage.setItem("yiqizou-trips", JSON.stringify(saved));
+      } catch (_) {
+        // 存储不可用时仍在当前会话展示新标题。
+      }
+    }
+    const alreadyAdded = saved.some((trip) => trip.id === MY_FIRST_HALF_DEMO?.id);
+    let migrationComplete = false;
+    try {
+      migrationComplete = localStorage.getItem(MY_FIRST_HALF_DEMO_MIGRATION_KEY) === "1";
+    } catch (_) {
+      migrationComplete = false;
+    }
+    if (alreadyAdded) {
+      try {
+        localStorage.setItem(MY_FIRST_HALF_DEMO_MIGRATION_KEY, "1");
+      } catch (_) {
+        // 标记失败不影响已经存在的示例数据。
+      }
+      return saved;
+    }
+    if (migrationComplete || !MY_FIRST_HALF_DEMO) return saved;
+    const demo = createMyFirstHalfDemo();
+    const upgraded = demo ? [demo, ...saved] : saved;
+    try {
+      localStorage.setItem(MY_FIRST_HALF_DEMO_MIGRATION_KEY, "1");
+      localStorage.setItem("yiqizou-trips", JSON.stringify(upgraded));
+    } catch (_) {
+      // 存储空间不可用时仍允许当前会话查看示例。
+    }
+    return upgraded;
+  }
   oldExpenses = Array.isArray(oldExpenses) ? oldExpenses : legacySeed;
-  return [{
+  const originalDemo = {
     id: crypto.randomUUID(),
-    name: "东京朋友旅行",
+    name: ORIGINAL_DEMO_NAME,
     demo: true,
     destination: "",
     startDate: "2026-08-12",
@@ -107,7 +185,14 @@ function loadTrips() {
     peopleCount: legacyPeople.length,
     people: legacyPeople,
     expenses: oldExpenses
-  }];
+  };
+  const newDemo = createMyFirstHalfDemo();
+  try {
+    localStorage.setItem(MY_FIRST_HALF_DEMO_MIGRATION_KEY, "1");
+  } catch (_) {
+    // 首次载入失败时保持内存中的示例可用。
+  }
+  return newDemo ? [newDemo, originalDemo] : [originalDemo];
 }
 
 function saveTrips() {
@@ -157,7 +242,7 @@ function renderHome() {
   if ($("#tripCount")) $("#tripCount").textContent = `${trips.length} 个`;
   $("#tripList").innerHTML = trips.map((trip) => {
     const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
-    const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+    const isDemo = trip.demo || ([ORIGINAL_DEMO_NAME, ORIGINAL_DEMO_OLD_NAME].includes(trip.name) && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
     return `<article class="swipe-row" data-trip-id="${escapeHtml(trip.id)}">
       <div class="swipe-content trip-card">
         <div><b>${escapeHtml(trip.name)}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${escapeHtml(dateRange(trip))} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
@@ -567,7 +652,7 @@ function renderDetail() {
   const total = trip.expenses.reduce((s, e) => s + cnyAmount(e), 0);
   $("#tripTitle").textContent = trip.name;
   $("#tripMeta").textContent = dateRange(trip);
-  const isDemo = trip.demo || (trip.name === "东京朋友旅行" && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
+  const isDemo = trip.demo || ([ORIGINAL_DEMO_NAME, ORIGINAL_DEMO_OLD_NAME].includes(trip.name) && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
   $("#detailDemoBanner").classList.toggle("hidden", !isDemo);
   $("#total").textContent = money(total);
   $("#summary").textContent = `${trip.expenses.length} 笔 · ${trip.people.length} 位朋友 · 人民币结算`;
@@ -1509,4 +1594,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=31");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=33");
