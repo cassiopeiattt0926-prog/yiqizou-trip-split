@@ -245,8 +245,8 @@ function renderHome() {
     const isDemo = trip.demo || ([ORIGINAL_DEMO_NAME, ORIGINAL_DEMO_OLD_NAME].includes(trip.name) && trip.expenses?.some((e) => e.title === "BB借钱给TT"));
     return `<article class="swipe-row" data-trip-id="${escapeHtml(trip.id)}">
       <div class="swipe-content trip-card">
-        <div><b>${escapeHtml(trip.name)}${isDemo ? `<span class="demo-badge">示例</span>` : ""}</b><span>${escapeHtml(dateRange(trip))} · ${trip.people.length}人${isDemo ? " · 示例数据，可删除" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
-        <strong>${money(total)}</strong>
+        <div class="trip-card-info"><b>${escapeHtml(trip.name)}</b><span>${escapeHtml(dateRange(trip))} · ${trip.people.length}人${isDemo ? " · 示例数据，左滑可删" : ""}</span><div class="trip-members">${trip.people.map(avatar).join("")}</div></div>
+        <div class="trip-card-side">${isDemo ? `<span class="demo-badge">示例</span>` : `<span class="trip-card-side-spacer" aria-hidden="true"></span>`}<strong>${money(total)}</strong></div>
       </div>
       <button class="delete-action" type="button" data-delete-trip="${escapeHtml(trip.id)}">删除</button>
     </article>`;
@@ -1594,4 +1594,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=33");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=34");
