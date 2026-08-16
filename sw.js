@@ -1,12 +1,12 @@
-const CACHE_NAME = "haoyouji-v30";
+const CACHE_NAME = "haoyouji-v31";
 const APP_FILES = [
   "./",
-  "index.html?v=30",
-  "style.css?v=30",
-  "avatars.js?v=30",
-  "rate-policy.js?v=30",
-  "app.js?v=30",
-  "manifest.webmanifest?v=30",
+  "index.html?v=31",
+  "style.css?v=31",
+  "avatars.js?v=31",
+  "rate-policy.js?v=31",
+  "app.js?v=31",
+  "manifest.webmanifest?v=31",
   "assets/brand/tt-transfer.svg",
   "assets/brand/app-icon-180.png",
   "assets/brand/app-icon-192.png",
@@ -15,7 +15,8 @@ const APP_FILES = [
   "assets/banners/participants.jpg",
   "assets/banners/borrow.jpg",
   "assets/banners/settlement.jpg",
-  "assets/banners/personal-stats.jpg"
+  "assets/banners/personal-stats.jpg",
+  "assets/banners/add-to-home.jpg"
 ];
 
 self.addEventListener("install", (event) => {

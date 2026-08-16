@@ -321,7 +321,7 @@ function drawQrFooter(ctx, width, top) {
   ctx.textAlign = "left";
   ctx.fillStyle = "#073f30";
   ctx.font = '700 31px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
-  ctx.fillText("扫描二维码，开始使用好友记", 300, top + 82);
+  ctx.fillText("微信长按识别/扫描二维码，开始使用好友记", 300, top + 82);
   ctx.fillStyle = "#718078";
   ctx.font = '23px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
   ctx.fillText("好友出游，记账分摊更省心", 300, top + 128);
@@ -829,7 +829,7 @@ function renderStats(trip) {
     const cats = Object.entries(stat.cats).sort((a, b) => b[1] - a[1]);
     return `<article class="stat-swipe-row" data-stat-person="${escapeHtml(p.id)}">
       <details class="stat-card stat-swipe-content">
-        <summary>${avatar(p)}<div class="stat-person"><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><div class="stat-summary-end"><strong class="stat-total">${money(stat.total)}</strong><span class="stat-toggle"><span data-stat-toggle-text>查看明细</span><i aria-hidden="true"></i></span></div></summary>
+        <summary>${avatar(p)}<div class="stat-person"><b>${escapeHtml(p.name)}</b><span>个人消费金额总计</span></div><div class="stat-summary-end"><strong class="stat-total">${money(stat.total)}</strong><span class="stat-toggle" data-stat-toggle-text>查看明细</span></div></summary>
         <div class="cat-list">${cats.length ? cats.map(([cat, n]) => `<div><span>${icons[cat] || "✦"} ${escapeHtml(cat)}</span><b>${money(n)}</b><em>${stat.total ? Math.round(n / stat.total * 100) : 0}%</em></div>`).join("") : `<p class="empty">暂无消费</p>`}</div>
         <div class="mini-list">${stat.rows.length ? stat.rows.map((e) => `<article><span>${icons[e.category] || "✦"}</span><div><b>${escapeHtml(e.title)}</b><small>${escapeHtml(e.date ? `${e.date} · ` : "")}${escapeHtml(e.category)}</small></div><strong>${money(e.share)}</strong></article>`).join("") : `<p class="empty">暂无消费明细</p>`}</div>
         <button class="wide personal-share" type="button" data-personal-share="${escapeHtml(p.id)}">生成${escapeHtml(p.name)}的个人消费清单</button>
@@ -1509,4 +1509,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=30");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=31");
