@@ -104,6 +104,7 @@ nav .active{color:var(--green);border-bottom:3px solid var(--green)}
 .fab{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:75;max-width:calc(100vw - 40px);white-space:nowrap;border:0;border-radius:99px;background:var(--orange);color:#fff;padding:14px 25px;font-weight:700;box-shadow:0 9px 25px #ff704d55}
 dialog{width:min(520px,100%);max-width:none;max-height:calc(100dvh - 10px);overflow-y:auto;border:0;border-radius:28px 28px 0 0;margin:auto auto 0;padding:10px 20px calc(22px + env(safe-area-inset-bottom));background:#fbfcf8}
 dialog.keyboard-visible{transform:translateY(calc(-1 * var(--keyboard-lift,0px)));transition:transform .18s ease}
+#sheet.keyboard-visible{transform:translateY(var(--sheet-keyboard-shift,0px))}
 dialog::backdrop{background:#10251d88}
 .grab{width:38px;height:4px;background:#ccd2ca;border-radius:3px;margin:auto}
 .sheet-head{display:flex;justify-content:space-between;align-items:center}
