@@ -1287,8 +1287,12 @@ function expenseSheetHeaderShift(dialog) {
   const cancelRect = cancel.getBoundingClientRect();
   const backRect = back.getBoundingClientRect();
   const cancelCenter = cancelRect.top + cancelRect.height / 2;
-  const backCenter = backRect.top + backRect.height / 2;
-  return Math.max(-260, Math.min(72, Math.round(backCenter - cancelCenter)));
+  // “返回”会随账单列表滚出屏幕，不能直接使用它当前的 viewport 坐标，
+  // 否则从列表中段/底部打开记账浮层时会把“取消”一并拉到屏幕外。
+  // 加回页面滚动量得到它在详情页顶部时的稳定位置，使任意滚动位置进入都一致。
+  const pageScrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+  const stableBackCenter = backRect.top + pageScrollTop + backRect.height / 2;
+  return Math.max(-120, Math.min(72, Math.round(stableBackCenter - cancelCenter)));
 }
 
 function syncKeyboardLift(forceAmountLift = false) {
@@ -1623,4 +1627,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=35");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=36");
