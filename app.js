@@ -1279,11 +1279,24 @@ function keepCaretVisible(el, moveToEnd = false) {
 }
 
 let stableViewportHeight = window.visualViewport?.height || window.innerHeight;
+function expenseSheetHeaderShift(dialog) {
+  if (dialog.id !== "sheet") return null;
+  const cancel = dialog.querySelector("[data-close]");
+  const back = $("#backHome");
+  if (!cancel || !back || $("#tripDetail").classList.contains("hidden")) return null;
+  const cancelRect = cancel.getBoundingClientRect();
+  const backRect = back.getBoundingClientRect();
+  const cancelCenter = cancelRect.top + cancelRect.height / 2;
+  const backCenter = backRect.top + backRect.height / 2;
+  return Math.max(-260, Math.min(72, Math.round(backCenter - cancelCenter)));
+}
+
 function syncKeyboardLift(forceAmountLift = false) {
   const active = document.activeElement;
   document.querySelectorAll("dialog.keyboard-visible").forEach((dialog) => {
     dialog.classList.remove("keyboard-visible");
     dialog.style.removeProperty("--keyboard-lift");
+    dialog.style.removeProperty("--sheet-keyboard-shift");
   });
   const dialog = active?.closest?.("dialog[open]");
   const viewport = window.visualViewport;
@@ -1296,10 +1309,18 @@ function syncKeyboardLift(forceAmountLift = false) {
   const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches;
   if (keyboardHeight < 70 && !(forceAmountLift && coarsePointer)) return;
   if (active.id !== "amount" && keyboardHeight < 110) return;
-  const lift = Math.min(260, Math.max(140, keyboardHeight * 0.64));
-  dialog.style.setProperty("--keyboard-lift", `${Math.round(lift)}px`);
+  const sheetShift = expenseSheetHeaderShift(dialog);
+  if (sheetShift === null) {
+    const lift = Math.min(260, Math.max(140, keyboardHeight * 0.64));
+    dialog.style.setProperty("--keyboard-lift", `${Math.round(lift)}px`);
+  } else {
+    dialog.style.setProperty("--sheet-keyboard-shift", `${sheetShift}px`);
+  }
   dialog.classList.add("keyboard-visible");
-  requestAnimationFrame(() => active.scrollIntoView({ behavior: "smooth", block: active.id === "amount" ? "start" : "center" }));
+  requestAnimationFrame(() => {
+    if (dialog.id === "sheet" && active.id === "amount") dialog.scrollTo({ top: 0, behavior: "auto" });
+    else active.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 function focusForTyping(el, options = {}) {
@@ -1315,8 +1336,16 @@ function focusForTyping(el, options = {}) {
   focus();
   requestAnimationFrame(() => {
     focus();
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (options.liftSheet) setTimeout(() => syncKeyboardLift(true), 120);
+    if (options.liftSheet) {
+      const dialog = el.closest("dialog");
+      if (dialog) dialog.scrollTop = 0;
+      setTimeout(() => {
+        if (dialog) dialog.scrollTop = 0;
+        syncKeyboardLift(true);
+      }, 120);
+    } else {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   });
 }
 
@@ -1594,4 +1623,4 @@ saveTrips();
 initPromoCarousel();
 initDetailSwipeBack();
 showHome();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=34");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=35");
